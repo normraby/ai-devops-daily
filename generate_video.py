@@ -1,15 +1,30 @@
 #!/usr/bin/env python3
-"""Generate MP4 video from script, voiceover, and optional logo watermark."""
+"""Generate MP4 video from Pexels B-roll, voiceover, and lower-third titles."""
 
 from __future__ import annotations
 
 import argparse
 import logging
+import os
+import random
+import re
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 import numpy as np
-from moviepy import AudioFileClip, CompositeVideoClip, ImageClip, TextClip, VideoClip
+import requests
+from dotenv import load_dotenv
+from moviepy import (
+    AudioFileClip,
+    ColorClip,
+    CompositeVideoClip,
+    ImageClip,
+    TextClip,
+    VideoFileClip,
+    concatenate_videoclips,
+)
+from moviepy.video.fx import Loop
 
 from script_utils import (
     ASSETS_DIR,
@@ -19,16 +34,79 @@ from script_utils import (
     script_path,
 )
 
+PROJECT_ROOT = Path(__file__).resolve().parent
+PEXELS_CACHE_DIR = ASSETS_DIR / "pexels_cache"
+
 WIDTH, HEIGHT = 1920, 1080
 FPS = 24
-TITLE_DURATION = 5.0
-BG_TOP = (13, 17, 23)  # #0D1117
-BG_BOTTOM = (31, 41, 55)  # #1F2937
+OVERLAY_OPACITY = 0.55
+LOWER_THIRD_HEIGHT = HEIGHT // 4  # bottom 25%
+LOWER_THIRD_TOP = HEIGHT - LOWER_THIRD_HEIGHT
+LOWER_THIRD_MARGIN_X = 80
+TEXT_BASELINE_Y = HEIGHT - 90
+MIN_CLIPS = 5
+MAX_CLIPS = 8
+CLIP_MIN_SEC = 10
+CLIP_MAX_SEC = 15
+PEXELS_SEARCH_URL = "https://api.pexels.com/videos/search"
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(message)s"
+
+# Title keyword -> Pexels search queries
+TOPIC_SEARCH_MAP: dict[str, list[str]] = {
+    "jenkins": ["jenkins software pipeline", "coding automation server"],
+    "terraform": ["terraform infrastructure", "data center cloud servers"],
+    "kubernetes": ["kubernetes containers", "data center server room"],
+    "gitops": ["git software development", "devops programming"],
+    "ansible": ["server room network", "it infrastructure automation"],
+    "finops": ["cloud cost analytics", "data center finance technology"],
+    "security": ["cybersecurity server room", "network security technology"],
+    "devsecops": ["secure coding programming", "cybersecurity technology"],
+    "observability": ["monitoring dashboard server", "network operations center"],
+    "incident": ["network operations center", "server monitoring alert"],
+    "testing": ["software testing laptop", "qa programming code"],
+    "database": ["database server room", "data storage technology"],
+    "platform": ["software engineering office", "developer team technology"],
+    "agents": ["artificial intelligence technology", "ai automation data"],
+    "agent": ["artificial intelligence technology", "ai automation data"],
+    "cloud": ["cloud computing data center", "server infrastructure network"],
+    "pipeline": ["ci cd pipeline", "software development automation"],
+    "docker": ["container server technology", "cloud infrastructure"],
+    "sre": ["site reliability server monitoring", "data center operations"],
+    "chatops": ["team collaboration technology", "developer slack office"],
+    "capacity": ["data center servers scaling", "cloud infrastructure growth"],
+    "multi-cloud": ["multi cloud network", "global data center"],
+    "benchmark": ["technology data analytics", "software performance testing"],
+    "ci/cd": ["ci cd pipeline automation", "continuous integration software"],
+    "ci cd": ["ci cd pipeline automation", "continuous integration software"],
+    "devops": ["devops programming team", "software pipeline automation"],
+    "ai": ["artificial intelligence technology", "machine learning servers"],
+    "qa": ["software quality testing", "programming code review"],
+    "code review": ["programming code screen", "software developer review"],
+    "tutorial": ["programming tutorial laptop", "coding developer screen"],
+}
+
+DEFAULT_SEARCH_TERMS = [
+    "data center servers",
+    "programming code screen",
+    "software pipeline technology",
+    "server room network",
+    "cloud computing infrastructure",
+    "devops automation",
+    "technology office coding",
+    "network operations center",
+]
+
+TITLE_STOPWORDS = {
+    "the", "and", "for", "with", "from", "into", "your", "that", "this",
+    "what", "when", "how", "why", "are", "is", "in", "of", "to", "a", "an",
+    "vs", "vs.", "don't", "lie", "explained", "future", "beyond", "daily",
+    "death", "dying", "rise", "numbers", "never", "again", "first", "step",
+    "case", "study", "modern", "modernization", "predictions", "building",
+}
 
 
 def setup_logging() -> None:
-    logs_dir = Path(__file__).resolve().parent / "logs"
+    logs_dir = PROJECT_ROOT / "logs"
     logs_dir.mkdir(parents=True, exist_ok=True)
     logging.basicConfig(
         level=logging.INFO,
@@ -38,6 +116,17 @@ def setup_logging() -> None:
             logging.FileHandler(logs_dir / "video_log.txt"),
         ],
     )
+
+
+def load_pexels_api_key() -> str:
+    load_dotenv(PROJECT_ROOT / ".env")
+    api_key = os.getenv("PEXELS_API_KEY", "").strip()
+    if not api_key or api_key == "your_key_here":
+        raise EnvironmentError(
+            "PEXELS_API_KEY not set. Add your free key to .env "
+            "(https://www.pexels.com/api/)"
+        )
+    return api_key
 
 
 def find_font() -> str:
@@ -56,77 +145,261 @@ def find_font() -> str:
     )
 
 
-def make_gradient_clip(duration: float) -> VideoClip:
-    def frame_function(t: float) -> np.ndarray:
-        del t
-        gradient = np.linspace(0, 1, HEIGHT)[:, np.newaxis]
-        frame = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
-        for channel in range(3):
-            top = BG_TOP[channel]
-            bottom = BG_BOTTOM[channel]
-            frame[:, :, channel] = (top + (bottom - top) * gradient).astype(np.uint8)
-        return frame
+def extract_title_keywords(title: str) -> list[str]:
+    """Extract topic keywords from the script TITLE for Pexels searches."""
+    title_lower = title.lower()
+    queries: list[str] = []
 
-    return VideoClip(frame_function, duration=duration)
+    if "ci/cd" in title_lower:
+        queries.extend(TOPIC_SEARCH_MAP["ci/cd"])
+    if "ci cd" in title_lower:
+        queries.extend(TOPIC_SEARCH_MAP["ci cd"])
+
+    for keyword, search_queries in TOPIC_SEARCH_MAP.items():
+        if keyword in title_lower:
+            queries.extend(search_queries)
+
+    for token in re.findall(r"[A-Za-z][A-Za-z0-9/+-]*", title):
+        normalized = token.lower().strip("/")
+        if normalized in TITLE_STOPWORDS or len(normalized) < 3:
+            continue
+        if normalized in TOPIC_SEARCH_MAP:
+            continue
+        queries.append(normalized.replace("-", " "))
+
+    if not queries:
+        queries = DEFAULT_SEARCH_TERMS.copy()
+
+    seen: set[str] = set()
+    unique: list[str] = []
+    for term in queries:
+        key = term.lower()
+        if key not in seen:
+            seen.add(key)
+            unique.append(term)
+
+    return unique
 
 
-def build_title_clip(title: str, font: str) -> TextClip:
-    return (
-        TextClip(
-            font=font,
-            text=title,
-            font_size=72,
-            color="white",
-            method="caption",
-            size=(WIDTH - 200, None),
-            text_align="center",
+def pick_video_file_url(video: dict) -> str | None:
+    files = video.get("video_files") or []
+    if not files:
+        return None
+
+    landscape = [f for f in files if f.get("width", 0) >= f.get("height", 0)]
+    candidates = landscape or files
+    candidates.sort(key=lambda f: (f.get("width", 0), f.get("height", 0)), reverse=True)
+
+    for candidate in candidates:
+        link = candidate.get("link")
+        if link:
+            return link
+    return None
+
+
+def search_pexels_videos(query: str, api_key: str, per_page: int = 20) -> list[dict]:
+    headers = {"Authorization": api_key}
+    params = {"query": query, "per_page": per_page, "orientation": "landscape"}
+    logging.info("Searching Pexels for: %s", query)
+
+    response = requests.get(PEXELS_SEARCH_URL, headers=headers, params=params, timeout=30)
+    response.raise_for_status()
+    videos = response.json().get("videos") or []
+
+    # Prefer clips in the 10-15 second sweet spot (accept 8-30s).
+    preferred = [
+        v for v in videos
+        if CLIP_MIN_SEC - 2 <= v.get("duration", 0) <= CLIP_MAX_SEC + 15
+    ]
+    return preferred or videos
+
+
+def download_pexels_clip(url: str, destination: Path) -> Path:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.exists() and destination.stat().st_size > 0:
+        logging.info("Using cached clip: %s", destination.name)
+        return destination
+
+    logging.info("Downloading clip -> %s", destination.name)
+    with requests.get(url, stream=True, timeout=120) as response:
+        response.raise_for_status()
+        with destination.open("wb") as handle:
+            for chunk in response.iter_content(chunk_size=1024 * 1024):
+                if chunk:
+                    handle.write(chunk)
+
+    if not destination.exists() or destination.stat().st_size == 0:
+        raise RuntimeError(f"Failed to download clip: {url}")
+
+    return destination
+
+
+def collect_pexels_clips(
+    search_terms: list[str],
+    api_key: str,
+    num_clips: int,
+    cache_dir: Path,
+) -> list[Path]:
+    """Download 5-8 unique stock clips; cache globally under assets/pexels_cache/."""
+    downloaded: list[Path] = []
+    used_ids: set[int] = set()
+    term_index = 0
+    attempts = 0
+    max_attempts = max(len(search_terms) * 5, 20)
+
+    while len(downloaded) < num_clips and attempts < max_attempts:
+        query = search_terms[term_index % len(search_terms)]
+        term_index += 1
+        attempts += 1
+
+        try:
+            videos = search_pexels_videos(query, api_key)
+        except requests.RequestException as exc:
+            logging.warning("Pexels search failed for '%s': %s", query, exc)
+            continue
+
+        random.shuffle(videos)
+        for video in videos:
+            video_id = video.get("id")
+            if video_id in used_ids:
+                continue
+
+            file_url = pick_video_file_url(video)
+            if not file_url:
+                continue
+
+            suffix = Path(urlparse(file_url).path).suffix or ".mp4"
+            destination = cache_dir / f"pexels_{video_id}{suffix}"
+
+            try:
+                download_pexels_clip(file_url, destination)
+            except (requests.RequestException, RuntimeError) as exc:
+                logging.warning("Clip download failed (id=%s): %s", video_id, exc)
+                continue
+
+            used_ids.add(video_id)
+            downloaded.append(destination)
+            logging.info(
+                "Collected clip %d/%d (Pexels id=%s, duration=%ss)",
+                len(downloaded),
+                num_clips,
+                video_id,
+                video.get("duration", "?"),
+            )
+            break
+
+    if len(downloaded) < MIN_CLIPS:
+        raise RuntimeError(
+            f"Could only download {len(downloaded)} clips (need at least {MIN_CLIPS}). "
+            "Check PEXELS_API_KEY and network connectivity."
         )
-        .with_duration(TITLE_DURATION)
-        .with_position("center")
+
+    return downloaded
+
+
+def fit_clip_to_frame(clip: VideoFileClip) -> VideoFileClip:
+    clip = clip.without_audio()
+    clip = clip.resized(height=HEIGHT)
+    if clip.w > WIDTH:
+        x_center = clip.w / 2
+        clip = clip.cropped(x1=x_center - WIDTH / 2, x2=x_center + WIDTH / 2)
+    elif clip.w < WIDTH:
+        clip = clip.resized(width=WIDTH)
+        if clip.h > HEIGHT:
+            y_center = clip.h / 2
+            clip = clip.cropped(y1=y_center - HEIGHT / 2, y2=y_center + HEIGHT / 2)
+    return clip
+
+
+def extract_clip_segment(source: VideoFileClip, duration: float, offset: float) -> VideoFileClip:
+    """Take a 10-15s segment from source, looping if the file is shorter."""
+    use_duration = min(max(duration, CLIP_MIN_SEC), CLIP_MAX_SEC)
+
+    if source.duration >= use_duration:
+        start = min(offset, max(0.0, source.duration - use_duration))
+        segment = source.subclipped(start, start + use_duration)
+    else:
+        segment = source.with_effects([Loop(duration=use_duration)])
+
+    return segment.with_duration(use_duration)
+
+
+def build_stock_video(clip_paths: list[Path], total_duration: float) -> VideoFileClip:
+    """Concatenate 5-8 B-roll clips (cycling as needed) to match voiceover length."""
+    segments: list[VideoFileClip] = []
+    elapsed = 0.0
+    clip_index = 0
+
+    while elapsed < total_duration - 0.05:
+        remaining = total_duration - elapsed
+        target = min(random.uniform(CLIP_MIN_SEC, CLIP_MAX_SEC), remaining)
+        target = max(target, min(CLIP_MIN_SEC, remaining))
+
+        path = clip_paths[clip_index % len(clip_paths)]
+        source = VideoFileClip(str(path))
+        fitted = fit_clip_to_frame(source)
+        segment = extract_clip_segment(fitted, target, offset=clip_index * 2.5)
+        segments.append(segment)
+        elapsed += segment.duration
+        clip_index += 1
+        source.close()
+
+    background = concatenate_videoclips(segments, method="compose")
+    if background.duration > total_duration:
+        background = background.subclipped(0, total_duration)
+    return background.with_duration(total_duration)
+
+
+def build_dark_overlay(duration: float) -> ColorClip:
+    return (
+        ColorClip(size=(WIDTH, HEIGHT), color=(0, 0, 0))
+        .with_opacity(OVERLAY_OPACITY)
+        .with_duration(duration)
     )
 
 
-def build_segment_clips(segments: list[dict], font: str) -> list[TextClip]:
+def build_lower_third_gradient(duration: float) -> ImageClip:
+    """Subtle dark gradient band in the bottom 25% of the frame."""
+    rgb = np.zeros((LOWER_THIRD_HEIGHT, WIDTH, 3), dtype=np.uint8)
+    alpha = np.linspace(0.0, 0.92, LOWER_THIRD_HEIGHT) ** 1.3
+    mask = np.stack([alpha] * WIDTH, axis=1).astype(float)
+
+    gradient = (
+        ImageClip(rgb)
+        .with_mask(ImageClip(mask, is_mask=True))
+        .with_duration(duration)
+        .with_position((0, LOWER_THIRD_TOP))
+    )
+    return gradient
+
+
+def build_lower_third_text_clips(segments: list[dict], font: str) -> list[TextClip]:
+    """White bold section titles in the bottom 25%, timed to voiceover segments."""
     clips: list[TextClip] = []
-    for index, segment in enumerate(segments, start=1):
-        start = max(segment["start"], TITLE_DURATION)
+
+    for segment in segments:
+        start = segment["start"]
         end = segment["end"]
         if end <= start:
             continue
-        bullet_text = f"• {segment['title']}"
-        clip = (
+
+        text = (
             TextClip(
                 font=font,
-                text=bullet_text,
-                font_size=42,
+                text=segment["title"],
+                font_size=44,
                 color="white",
                 method="caption",
-                size=(WIDTH - 240, None),
+                size=(WIDTH - 160, None),
                 text_align="left",
             )
             .with_start(start)
             .with_duration(end - start)
-            .with_position(("center", 720 + index * 8))
+            .with_position((LOWER_THIRD_MARGIN_X, TEXT_BASELINE_Y))
         )
-        clips.append(clip)
+        clips.append(text)
+
     return clips
-
-
-def build_watermark(duration: float) -> ImageClip | None:
-    logo_path = ASSETS_DIR / "logo.png"
-    if not logo_path.exists():
-        logging.info("Logo not found at %s — skipping watermark", logo_path)
-        return None
-
-    logo = (
-        ImageClip(str(logo_path))
-        .resized(height=80)
-        .with_duration(duration)
-        .with_opacity(0.75)
-        .with_position((WIDTH - 140, HEIGHT - 100))
-    )
-    logging.info("Applied logo watermark from %s", logo_path)
-    return logo
 
 
 def generate_video(video_number: int) -> str:
@@ -140,10 +413,15 @@ def generate_video(video_number: int) -> str:
             f"Voiceover not found: {audio_file}. Run generate_voiceover.py first."
         )
 
+    api_key = load_pexels_api_key()
     content = script_file.read_text(encoding="utf-8")
     header = parse_header(content)
     title = header.get("title") or f"AI DevOps Daily #{video_number}"
     segments = parse_timestamps(content)
+
+    search_terms = extract_title_keywords(title)
+    num_clips = min(MAX_CLIPS, max(MIN_CLIPS, min(len(segments), MAX_CLIPS) if segments else 6))
+    cache_dir = PEXELS_CACHE_DIR
 
     font = find_font()
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -151,22 +429,22 @@ def generate_video(video_number: int) -> str:
 
     logging.info("Generating video for video %s", video_number)
     logging.info("Title: %s", title)
-    logging.info("Segments: %d", len(segments))
+    logging.info("Title keywords / search terms: %s", search_terms[:num_clips])
+    logging.info("Segments: %d | Stock clips: %d", len(segments), num_clips)
 
     audio = AudioFileClip(str(audio_file))
     duration = audio.duration
 
-    background = make_gradient_clip(duration)
-    title_clip = build_title_clip(title, font)
-    segment_clips = build_segment_clips(segments, font)
-    watermark = build_watermark(duration)
+    clip_paths = collect_pexels_clips(search_terms, api_key, num_clips, cache_dir)
+    background = build_stock_video(clip_paths, duration)
+    overlay = build_dark_overlay(duration)
+    lower_gradient = build_lower_third_gradient(duration)
+    lower_text = build_lower_third_text_clips(segments, font)
 
-    layers = [background, title_clip, *segment_clips]
-    if watermark is not None:
-        layers.append(watermark)
-
-    video = CompositeVideoClip(layers, size=(WIDTH, HEIGHT)).with_audio(audio)
-    video = video.with_duration(duration)
+    video = CompositeVideoClip(
+        [background, overlay, lower_gradient, *lower_text],
+        size=(WIDTH, HEIGHT),
+    ).with_audio(audio).with_duration(duration)
 
     logging.info("Rendering video (duration=%.1fs) to %s", duration, output_file)
     video.write_videofile(
@@ -178,19 +456,21 @@ def generate_video(video_number: int) -> str:
     )
 
     video.close()
+    background.close()
     audio.close()
 
     if not output_file.exists() or output_file.stat().st_size == 0:
         raise RuntimeError(f"Video generation failed: {output_file}")
 
-    logging.info("Video saved successfully (%d bytes)", output_file.stat().st_size)
+    size_mb = output_file.stat().st_size / (1024 * 1024)
+    logging.info("Video saved successfully (%.1f MB)", size_mb)
     return str(output_file)
 
 
 def main() -> int:
     setup_logging()
-    parser = argparse.ArgumentParser(description="Generate MP4 video from script")
-    parser.add_argument("video_number", type=int, help="Video number (e.g. 1)")
+    parser = argparse.ArgumentParser(description="Generate MP4 with Pexels B-roll")
+    parser.add_argument("video_number", type=int, help="Video number (e.g. 3)")
     args = parser.parse_args()
 
     try:
