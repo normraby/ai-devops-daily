@@ -1,0 +1,44 @@
+TITLE: Kubernetes Cost Optimization with AI Agents
+DESCRIPTION: Kubernetes cost overruns are the number-one FinOps complaint in 2026. Learn how AI agents continuously right-size workloads, eliminate waste, and cut cluster bills by 35-50% without sacrificing performance or reliability.
+TAGS: kubernetes, cost optimization, finops, ai agents, cloud costs, k8s, platform engineering, resource management, devops
+SCRIPT:
+
+0:00-0:30 - The Kubernetes Cost Crisis
+Visual: Cloud bill dashboard showing Kubernetes spend growing 40% year-over-year. Red alert on cost anomaly.
+Voiceover: Kubernetes was supposed to make infrastructure cheaper. Instead, the average enterprise Kubernetes bill grew forty percent year-over-year in 2025, and forty-five percent in 2026. Not because teams are running more workloads — because they're running workloads inefficiently. Over-provisioned CPU requests. Memory limits set to "just in case." Idle nodes running twenty-four seven. Orphaned persistent volumes nobody deleted. The FinOps Foundation reports that sixty-eight percent of Kubernetes spend is waste. Today, we show you how AI agents fix this automatically.
+
+0:30-1:00 - Where the Waste Hides
+Visual: Pie chart of Kubernetes waste categories: Over-provisioned requests (34%), Idle nodes (22%), Orphaned resources (18%), Wrong instance types (15%), Unused namespaces (11%).
+Voiceover: Let's break down where the waste hides. Over-provisioned resource requests account for thirty-four percent of waste. Teams set CPU requests at two cores because someone said "better safe than sorry" — actual usage is zero point three cores. Idle nodes are twenty-two percent. Autoscaler minimums set too high, or nodes that never scale down because one pod has a restrictive anti-affinity rule. Orphaned resources — PVCs, load balancers, static IPs — eighteen percent. Wrong instance types fifteen percent. Unused namespaces eleven percent. Every category is fixable. None require human intervention at two AM.
+
+1:00-1:30 - How AI Agents Analyze Usage
+Visual: Agent architecture: Prometheus metrics → AI Agent → Recommendations → Auto-apply with guardrails. Heat map of actual vs requested resources.
+Voiceover: AI cost optimization agents connect to your metrics stack — Prometheus, Datadog, CloudWatch — and build a continuous model of actual resource usage versus requested resources. They analyze thirty days of historical data minimum, accounting for traffic patterns, seasonal spikes, and batch job schedules. The agent generates a utilization heat map for every pod, node, and namespace. Where actual usage is consistently below fifty percent of requests, the agent flags it. Where nodes run below thirty percent capacity for more than four hours, the agent flags it. Where resources haven't been accessed in fourteen days, the agent flags them for cleanup.
+
+1:30-2:00 - Right-Sizing in Action
+Visual: Before/after comparison for a sample deployment. CPU request: 2000m → 400m. Memory: 4Gi → 512Mi. Cost: $847/mo → $124/mo. Performance graph unchanged.
+Voiceover: Here's right-sizing in action. A payment processing service running in production. Original configuration: two CPU cores requested, four gigabytes memory, three replicas. Monthly cost: eight hundred forty-seven dollars. The AI agent analyzed sixty days of metrics. Actual CPU usage: zero point four cores peak. Actual memory: five hundred twelve megabytes peak. Recommended configuration: four hundred millicores CPU, five hundred twelve megabytes memory, three replicas. Monthly cost after right-sizing: one hundred twenty-four dollars. Eighty-five percent cost reduction. Performance metrics unchanged — p99 latency, error rate, throughput all within baseline. The agent didn't guess. It measured.
+
+2:00-2:30 - Node Pool Optimization
+Visual: Node pool comparison. Before: 12 m5.2xlarge nodes, 31% avg utilization. After: 8 m5.xlarge + 4 spot instances, 72% avg utilization. Cost reduction arrow.
+Voiceover: Node pool optimization is where the big savings live. One e-commerce platform was running twelve m5 dot two xlarge nodes with thirty-one percent average utilization. Cost: fourteen thousand two hundred dollars per month for the node pool alone. The AI agent recommended a mixed strategy: eight m5 dot xlarge on-demand for baseline workloads, four spot instances for batch and stateless services. Average utilization jumped to seventy-two percent. Monthly node pool cost: six thousand one hundred dollars. Fifty-seven percent reduction. The agent also configured the cluster autoscaler with tighter bounds — minimum three nodes instead of six, maximum ten instead of fifteen — based on actual traffic patterns.
+
+2:30-3:00 - Automated Cleanup
+Visual: Cleanup dashboard showing orphaned resources detected and removed: 23 PVCs, 7 load balancers, 14 static IPs, 5 unused namespaces. Dollar savings counter ticking up.
+Voiceover: Automated cleanup runs continuously. The agent scans for orphaned persistent volume claims with no active pods — found twenty-three in one cluster, costing four hundred dollars per month in storage. Unused load balancers — seven found, three hundred fifty dollars per month. Static IPs attached to terminated instances — fourteen found, one hundred forty dollars per month. Namespaces with no active deployments for thirty-plus days — five found, various associated costs. Total automated cleanup savings: two thousand one hundred dollars per month in this single cluster. Every deletion goes through a safety check: seven-day grace period, notification to namespace owners, and automatic rollback if a deleted resource is referenced within thirty days.
+
+3:00-3:30 - Guardrails and Safety
+Visual: Guardrail policy diagram: Never reduce production below baseline, Always maintain 20% headroom, Require human approval for >50% reduction, Auto-rollback on latency spike.
+Voiceover: Safety is non-negotiable. AI agents operate within guardrails you define. Never reduce production resource requests below the ninety-fifth percentile of historical usage. Always maintain twenty percent headroom above peak observed usage. Require human approval for any reduction exceeding fifty percent. Auto-rollback if p99 latency increases more than ten percent after a change. Never delete resources in namespaces tagged production-critical without explicit approval. These guardrails mean the agent optimizes aggressively on staging and development environments — where seventy percent of waste typically lives — while being conservative on production. You get the savings without the risk.
+
+3:30-4:00 - Real Results: Three Case Studies
+Visual: Three case study cards with company size, cluster count, and savings percentage.
+Voiceover: Three real results. Case one: SaaS startup, three clusters, forty-one percent cost reduction in sixty days, zero performance incidents. Case two: Financial services, twelve clusters, thirty-eight percent reduction, required compliance review before auto-applying production changes — added two weeks but still completed. Case three: Media company, twenty-seven clusters across three cloud providers, fifty-two percent reduction, saved one point two million dollars annually. The pattern is consistent: thirty to fifty percent savings within ninety days, with the first visible results in two weeks from staging environment optimization alone.
+
+4:00-4:30 - Implementation Roadmap
+Visual: Four-week implementation timeline. Week 1: Connect metrics, Week 2: Analysis and report, Week 3: Apply staging changes, Week 4: Production with guardrails.
+Voiceover: Your four-week implementation roadmap. Week one: connect the AI agent to your metrics stack and billing data. Read-only mode — no changes yet. Week two: receive your first optimization report. Review recommendations, adjust guardrails, identify quick wins in dev and staging. Week three: auto-apply staging and development optimizations. Measure performance impact — there shouldn't be any. Week four: enable production optimization with full guardrails and human approval gates for large changes. By week six, you'll have a monthly savings report that FinOps and engineering leadership will both celebrate.
+
+4:30-5:00 - Closing
+Visual: AI DevOps Daily branding. Stat highlight: 68% of K8s spend is waste. Next episode: GitOps — The Future of Infrastructure Management.
+Voiceover: Sixty-eight percent of Kubernetes spend is waste. That's not a typo — that's the industry average. AI agents turn that waste into savings automatically, continuously, and safely. You don't need a FinOps team of ten people manually reviewing dashboards. You need an agent that watches your metrics, understands your patterns, and optimizes around the clock. Start with a read-only analysis this week. The report alone will justify the next step. I'm AI DevOps Daily — next episode, we explore GitOps and why it's the foundation of modern infrastructure management.

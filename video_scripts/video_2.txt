@@ -1,0 +1,44 @@
+TITLE: Jenkins to Terraform: A Modernization Case Study for 2026
+DESCRIPTION: Follow a real enterprise migration from Jenkins-driven infrastructure to Terraform-managed pipelines orchestrated by AI agents. We cover the timeline, pitfalls, cost savings, and lessons learned from a six-month modernization program.
+TAGS: jenkins, terraform, infrastructure as code, modernization, devops case study, ai agents, platform engineering, ci cd migration
+SCRIPT:
+
+0:00-0:30 - Introduction: The Legacy Problem
+Visual: Before/after split screen. Left: cluttered Jenkins dashboard with 47 jobs. Right: clean Terraform plan output with green checks.
+Voiceover: In January 2025, a healthcare technology company with three hundred engineers came to us with a problem. Their Jenkins instance was twelve years old. It managed not just CI/CD, but infrastructure provisioning, database migrations, and compliance scanning. One tool doing everything — and breaking constantly. They needed a modernization path that didn't halt feature delivery. This is their story: a six-month Jenkins to Terraform migration, orchestrated by AI DevOps agents, completed with zero production outages.
+
+0:30-1:00 - Starting State Assessment
+Visual: Audit dashboard showing: 47 Jenkins jobs, 23 custom Groovy scripts, 156 plugin dependencies, 4.2 hours average pipeline failure recovery time.
+Voiceover: The first step was brutal honesty. Their platform team ran a full audit. Forty-seven Jenkins jobs, twenty-three custom Groovy scripts that nobody fully understood, one hundred fifty-six plugin dependencies, and an average of four point two hours to recover from a pipeline failure. Infrastructure changes required a human to SSH into servers. Database migrations were manual. Compliance scans ran weekly instead of on every commit. The technical debt wasn't a line item — it was a tax on every feature shipped.
+
+1:00-1:30 - The Target Architecture
+Visual: Target architecture diagram: Git → AI Agent → Terraform Plan/Apply → Kubernetes. Separate lanes for CI, CD, and IaC with clear boundaries.
+Voiceover: The target architecture separated concerns cleanly. Git remained the source of truth. AI DevOps agents replaced Jenkins as the orchestrator. Terraform became the single tool for infrastructure as code — no more shell scripts provisioning servers. Kubernetes handled runtime. The agent's job: watch for code changes, generate Terraform plans, run tests, apply changes through approved gates, and roll back automatically on failure. Jenkins didn't disappear on day one. It ran in parallel for ninety days while the team validated parity.
+
+1:30-2:00 - Phase 1: Shadow Mode (Month 1-2)
+Visual: Timeline graphic. Month 1-2 highlighted. Two parallel pipelines running: Jenkins (blue) and AI Agent + Terraform (green). Comparison metrics table.
+Voiceover: Phase one was shadow mode. For every Jenkins job, the AI agent generated an equivalent Terraform-managed pipeline. Both ran on every commit. The team compared outputs: build artifacts, test results, deployment targets, and rollback behavior. In the first thirty days, the agent matched Jenkins output ninety-four percent of the time. The six percent gap was mostly Jenkins-specific workarounds that shouldn't exist in the new architecture. By day sixty, parity reached ninety-nine point two percent. That's when leadership approved phase two.
+
+2:00-2:30 - Phase 2: Hybrid Migration (Month 3-4)
+Visual: Service migration tracker. Green = migrated, yellow = in progress, red = legacy Jenkins. Counter showing 12 of 47 services migrated.
+Voiceover: Phase two migrated services in risk order. Internal tools and staging environments first. Customer-facing APIs last. Each migration followed a playbook: export Jenkins job configuration, let the AI agent generate equivalent Terraform modules, run parallel for two weeks, cut over on a Tuesday morning with full rollback plan. Twelve services migrated in month three. By end of month four, thirty-eight of forty-seven were on the new stack. The nine remaining were the most complex — multi-stage deployments with manual approval gates that required custom agent training.
+
+2:30-3:00 - Terraform Module Strategy
+Visual: Terraform module tree: modules/networking, modules/compute, modules/database, modules/monitoring. Reusable module pattern diagram.
+Voiceover: The Terraform module strategy was critical. Instead of one monolithic state file, they organized into composable modules: networking, compute, database, monitoring. Each module had its own state backend in S3 with DynamoDB locking. The AI agent learned the module patterns from existing infrastructure and generated new modules following the same conventions. Drift detection ran every four hours. When drift was detected, the agent generated a plan and opened a pull request — never auto-applied without human review on production resources.
+
+3:00-3:30 - Handling the Hard Cases
+Visual: Three challenge cards: 1. Manual approval gates, 2. Legacy database migrations, 3. Compliance scanning integration.
+Voiceover: Three cases almost derailed the migration. Manual approval gates: solved by implementing agent-supervised approval workflows in GitHub Actions with Slack notifications and automatic timeout rollback. Legacy database migrations: the agent learned Flyway patterns from historical Jenkins logs and generated equivalent Terraform-triggered migration jobs. Compliance scanning: instead of a weekly Jenkins cron job, the agent integrated OPA policy checks into every Terraform plan. Every infrastructure change was compliance-checked before apply. These weren't blockers — they were design requirements the new architecture handled better than Jenkins ever could.
+
+3:30-4:00 - Results After Six Months
+Visual: Results dashboard with large numbers: 4.7x deployment frequency, 73% reduction in pipeline failures, $340K annual savings, 2.8 FTE engineers redeployed.
+Voiceover: After six months, the numbers spoke for themselves. Deployment frequency increased four point seven times. Pipeline failures dropped seventy-three percent. Annual infrastructure tooling costs decreased by three hundred forty thousand dollars — mostly Jenkins agent fleet and dedicated maintenance headcount. Two point eight full-time equivalent engineers were redeployed from Jenkins babysitting to building internal developer platform features. Mean time to recovery for infrastructure issues went from four point two hours to eleven minutes. Eleven minutes. Because Terraform state and agent rollback replaced manual SSH debugging.
+
+4:00-4:30 - Lessons Learned
+Visual: Five lesson cards appearing sequentially with icons.
+Voiceover: Five lessons for your migration. One: never big-bang. Shadow mode builds confidence and catches edge cases. Two: invest in Terraform module standards before migrating a single service. Three: train your AI agent on your specific patterns — generic agents miss organizational conventions. Four: keep Jenkins running in parallel longer than you think you need. We recommended sixty days; they needed ninety. Five: measure everything before and after. Without baseline metrics, you can't prove ROI to leadership. And leadership approval is what funds phase three.
+
+4:30-5:00 - Closing and Next Steps
+Visual: AI DevOps Daily branding. Preview: AI Agents vs Jenkins Pipelines — The Numbers Don't Lie.
+Voiceover: Modernizing from Jenkins to Terraform isn't just a tooling change. It's an organizational upgrade that frees your best engineers to build instead of maintain. The healthcare company in this case study didn't just fix their CI/CD — they transformed their platform team from cost center to force multiplier. If you're running Jenkins in 2026, start your audit this week. Map your jobs, count your plugins, measure your maintenance hours. Then build your shadow mode plan. The migration path is proven. The tools are ready. The only question is when you start. I'm AI DevOps Daily — next episode, we put AI agents and Jenkins pipelines head to head with hard performance data.

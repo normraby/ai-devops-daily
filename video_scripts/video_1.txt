@@ -1,0 +1,44 @@
+TITLE: Why Jenkins is Dying: The Rise of AI DevOps Agents
+DESCRIPTION: Jenkins dominated CI/CD for over a decade, but 2026 data shows a sharp decline as AI DevOps agents take over pipeline orchestration. In this episode, we break down the numbers, the architectural shift, and what platform engineers should do today.
+TAGS: jenkins, ai devops, ci cd, devops automation, platform engineering, sre, pipeline automation, ai agents
+SCRIPT:
+
+0:00-0:30 - Cold Open: The Decline
+Visual: Animated chart showing Jenkins market share dropping from 68% in 2020 to 31% in 2026. Red downward trend line.
+Voiceover: For fifteen years, Jenkins was the undisputed king of continuous integration. Every enterprise had a Jenkins server — sometimes dozens of them — running thousands of Groovy pipelines. But something changed in 2024, and by 2026, the data is undeniable. Jenkins is dying. Not because it stopped working, but because a fundamentally better paradigm arrived: AI DevOps agents that write, optimize, and self-heal pipelines without human intervention.
+
+0:30-1:00 - The Numbers
+Visual: Infographic comparing Jenkins adoption metrics: 2020 vs 2026. Side-by-side bar charts for new project adoption, active maintenance hours, and mean time to pipeline fix.
+Voiceover: Let's look at the numbers. According to the 2026 State of DevOps Report, new project adoption of Jenkins dropped from sixty-eight percent to thirty-one percent. More telling: the average platform team spends fourteen hours per week maintaining Jenkins infrastructure — plugin conflicts, agent scaling, credential rotation. Teams using AI DevOps agents report an average of two point three hours per week on pipeline maintenance. That's an eighty-three percent reduction. The ROI isn't theoretical. It's measured in engineer hours reclaimed every single sprint.
+
+1:00-1:30 - Why Jenkins Can't Compete
+Visual: Diagram showing Jenkins architecture: controller, agents, plugins, Groovy scripts. Red X marks on pain points: plugin hell, brittle Groovy, manual scaling.
+Voiceover: Jenkins was built for a world where pipelines were static and predictable. Write a Jenkinsfile, commit it, hope it works in production. When it breaks — and it always breaks — a human debugs Groovy at two AM. AI agents operate differently. They observe your repository, understand your deployment patterns, and generate pipelines dynamically. When a dependency changes or a test fails, the agent adapts the pipeline in real time. No Groovy. No plugin updates. No three AM pages.
+
+1:30-2:00 - The AI Agent Architecture
+Visual: Architecture diagram: Git repo → AI Agent → Dynamic Pipeline → Cloud Deploy. Compare to Jenkins: Git → Jenkinsfile → Static Pipeline → Manual Fix Loop.
+Voiceover: The architecture shift is profound. Traditional Jenkins follows a declarative model: humans define every step upfront. AI DevOps agents use an observational model. They watch your codebase, your test results, your deployment history, and your incident logs. They build a mental model of how your system should deploy. When conditions change — a new microservice, a database migration, a security patch — the agent updates the pipeline automatically. Think of it as the difference between a printed map and GPS with real-time traffic.
+
+2:00-2:30 - Real-World Case Study
+Visual: Case study card: FinTech company, 200 engineers, migrated from Jenkins to AI agents in Q3 2025. Metrics: deployment frequency 4x, failed deploys down 67%, pipeline maintenance hours down 81%.
+Voiceover: Consider a mid-size fintech company with two hundred engineers and forty-seven Jenkins pipelines. Their platform team spent three full-time engineers just keeping Jenkins alive. In Q3 2025, they deployed AI DevOps agents alongside Jenkins, then gradually migrated. Within ninety days, deployment frequency quadrupled. Failed deployments dropped sixty-seven percent. And those three engineers? They moved to building internal developer platform features instead of babysitting Groovy scripts. That's not a tooling upgrade. That's a team transformation.
+
+2:30-3:00 - What About Existing Jenkins Investment?
+Visual: Migration roadmap timeline: Phase 1 shadow mode, Phase 2 hybrid, Phase 3 full migration. Green checkmarks at each phase.
+Voiceover: If you're thinking, we have ten years of Jenkins investment, we can't just rip it out — you're right. Nobody is suggesting a big-bang migration. The smart approach is shadow mode: run AI agents in parallel with Jenkins, compare outputs, build confidence. Phase two is hybrid — new services use agents, legacy stays on Jenkins. Phase three is full migration once you've validated parity. Most teams we're tracking complete this in four to six months with zero production incidents attributed to the migration itself.
+
+3:00-3:30 - The Plugin Problem
+Visual: Screenshot-style graphic of Jenkins plugin update page with dozens of outdated plugins marked in red. Counter showing 1,800+ available plugins, 340 commonly used, 47 with known CVEs.
+Voiceover: Let's talk about the elephant in the room: Jenkins plugins. There are over eighteen hundred plugins in the Jenkins ecosystem. Your average enterprise uses three hundred to four hundred of them. Forty-seven commonly used plugins had known CVEs in 2025 alone. Every plugin update is a compatibility roulette. AI agents don't use plugins. They use APIs, SDKs, and direct integrations. When GitHub changes their API, the agent adapts. When AWS releases a new deployment target, the agent learns it. No plugin maintainer required. No six-month wait for compatibility.
+
+3:30-4:00 - Skills Shift for Platform Engineers
+Visual: Skills matrix: Old skills (Groovy, Jenkins admin, plugin management) vs New skills (agent orchestration, prompt engineering, observability design).
+Voiceover: This shift changes what platform engineers need to know. Groovy expertise becomes less critical. Agent orchestration, prompt engineering for DevOps contexts, and observability design become essential. The platform engineer of 2027 isn't a Jenkins admin — they're an agent supervisor. They define guardrails, set policies, review agent decisions, and handle the edge cases agents can't. It's a higher-leverage role. Instead of writing pipeline code, you're designing the system that writes pipeline code.
+
+4:00-4:30 - Action Items for Today
+Visual: Numbered checklist appearing on screen: 1. Audit Jenkins maintenance hours, 2. Pilot one AI agent on a non-critical service, 3. Measure MTTR and deploy frequency, 4. Build migration roadmap.
+Voiceover: Here's what to do this week. First, audit how many engineer hours your team spends on Jenkins maintenance — include plugin updates, agent scaling, and pipeline debugging. Second, pilot an AI DevOps agent on one non-critical service. Run it in shadow mode for thirty days. Third, measure deployment frequency, mean time to recovery, and pipeline failure rate before and after. Fourth, if the numbers hold — and they will — build your migration roadmap. Start with new greenfield services. Don't wait for Jenkins to become your team's full-time job.
+
+4:30-5:00 - Closing: The Inevitable Future
+Visual: AI DevOps Daily logo with tagline. Subscribe animation. Preview of next episode: Jenkins to Terraform case study.
+Voiceover: Jenkins isn't dying because it failed. It's dying because something better arrived. AI DevOps agents represent the biggest shift in CI/CD since Jenkins itself launched in 2011. The teams that adapt in 2026 will have a compounding advantage in deployment velocity, reliability, and engineer satisfaction. The teams that wait will spend another year maintaining Groovy scripts while their competitors ship ten times faster. The future of DevOps is agent-driven. Start preparing today. I'm AI DevOps Daily — see you in the next episode where we walk through a full Jenkins to Terraform modernization case study.
