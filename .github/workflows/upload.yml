@@ -2,9 +2,16 @@ name: AI DevOps Daily Upload
 
 on:
   schedule:
-    # Monday and Thursday at 10:00 AM EST (15:00 UTC)
     - cron: "0 15 * * 1,4"
   workflow_dispatch:
+    inputs:
+      video_number:
+        description: "Override video number (leave blank for auto)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
 
 jobs:
   upload:
@@ -19,7 +26,10 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
+      - name: Install FFmpeg
+        run: sudo apt-get install -y ffmpeg
+
+      - name: Install Python dependencies
         run: pip install -r requirements.txt
 
       - name: Write client_secret.json
@@ -29,7 +39,12 @@ jobs:
         run: echo '${{ secrets.TOKEN_JSON }}' > token.json
 
       - name: Run pipeline
-        run: python run_pipeline.py
+        run: |
+          if [ -n "${{ github.event.inputs.video_number }}" ]; then
+            python run_pipeline.py --video ${{ github.event.inputs.video_number }}
+          else
+            python run_pipeline.py
+          fi
 
       - name: Commit and push tracker.json
         run: |

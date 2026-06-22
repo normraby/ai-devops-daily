@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import logging
 import subprocess
@@ -51,10 +52,29 @@ def run_step(script_name: str, video_number: int) -> None:
 
 def run_pipeline() -> int:
     setup_logging()
+    parser = argparse.ArgumentParser(description="Run AI DevOps Daily pipeline")
+    parser.add_argument("--video", type=int, default=None, help="Override video number to process")
+    args = parser.parse_args()
+
     tracker = load_tracker()
-    video_number = int(tracker.get("last_uploaded", 0)) + 1
+    if args.video is not None:
+        video_number = args.video
+        logging.info("Video number overridden by --video flag: %s", video_number)
+    else:
+        video_number = int(tracker.get("last_uploaded", 0)) + 1
 
     logging.info("Starting pipeline for video %s", video_number)
+
+    # Clean up partial output files if previous attempt failed
+    from script_utils import OUTPUT_DIR
+    prev_status = tracker.get("videos", {}).get(str(video_number), {}).get("status")
+    if prev_status == "failed":
+        logging.info("Previous attempt failed — cleaning up partial output files for video %s", video_number)
+        for ext in ["mp3", "mp4", "jpg"]:
+            f = OUTPUT_DIR / f"video_{video_number}.{ext}" if ext != "jpg" else OUTPUT_DIR / f"thumbnail_{video_number}.jpg"
+            if f.exists():
+                f.unlink()
+                logging.info("Deleted partial file: %s", f)
 
     if video_number > MAX_VIDEO_NUMBER:
         logging.info(

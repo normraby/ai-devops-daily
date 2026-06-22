@@ -1,1 +1,11 @@
-{"last_uploaded": 0, "videos": {}}
+{
+  "last_uploaded": 1,
+  "videos": {
+    "1": {
+      "processed_at": "2026-06-22T20:32:57+00:00",
+      "status": "uploaded",
+      "video_id": "isvLkmuKe48",
+      "url": "https://www.youtube.com/watch?v=isvLkmuKe48"
+    }
+  }
+}
