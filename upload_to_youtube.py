@@ -148,7 +148,13 @@ def upload_to_youtube(video_number: int) -> dict:
     logging.info("Uploading video %s: %s", video_number, metadata["title"])
     youtube = get_authenticated_service()
     video_id = upload_video_with_retry(youtube, video_file, metadata)
-    set_thumbnail(youtube, video_id, thumbnail_file)
+    try:
+        set_thumbnail(youtube, video_id, thumbnail_file)
+    except Exception as thumb_err:
+        logging.warning(
+            "Thumbnail upload skipped (channel may need YouTube verification): %s",
+            thumb_err,
+        )
 
     result = {
         "video_number": video_number,
