@@ -1,11 +1,17 @@
 {
-  "last_uploaded": 1,
+  "last_uploaded": 2,
   "videos": {
     "1": {
       "processed_at": "2026-06-22T20:32:57+00:00",
       "status": "uploaded",
       "video_id": "isvLkmuKe48",
       "url": "https://www.youtube.com/watch?v=isvLkmuKe48"
+    },
+    "2": {
+      "processed_at": "2026-06-22T21:01:53+00:00",
+      "status": "uploaded",
+      "video_id": "eWK2we6wdxc",
+      "url": "https://www.youtube.com/watch?v=eWK2we6wdxc"
     }
   }
 }
