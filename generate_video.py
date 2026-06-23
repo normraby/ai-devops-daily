@@ -21,6 +21,7 @@ from moviepy import (
     CompositeVideoClip,
     ImageClip,
     TextClip,
+    VideoClip,
     VideoFileClip,
     concatenate_videoclips,
 )
@@ -50,6 +51,9 @@ CLIP_MIN_SEC = 10
 CLIP_MAX_SEC = 15
 PEXELS_SEARCH_URL = "https://api.pexels.com/videos/search"
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(message)s"
+BG_TOP = (13, 17, 23)  # #0D1117
+BG_BOTTOM = (31, 41, 55)  # #1F2937
+MIN_VALID_CLIPS = 2
 
 # Title keyword -> Pexels search queries
 TOPIC_SEARCH_MAP: dict[str, list[str]] = {
@@ -289,25 +293,87 @@ def collect_pexels_clips(
             break
 
     if len(downloaded) < MIN_CLIPS:
-        raise RuntimeError(
-            f"Could only download {len(downloaded)} clips (need at least {MIN_CLIPS}). "
-            "Check PEXELS_API_KEY and network connectivity."
+        logging.warning(
+            "Downloaded only %d/%d requested clips; will validate and may fall back to gradient",
+            len(downloaded),
+            num_clips,
         )
 
     return downloaded
 
 
+def load_valid_videoclip(clip_path: Path) -> VideoFileClip | None:
+    """Load a VideoFileClip and verify its reader returns valid frames."""
+    clip: VideoFileClip | None = None
+    try:
+        clip = VideoFileClip(str(clip_path))
+        clip = clip.without_audio()  # strip Pexels music — voiceover is the only audio track
+        test_frame = clip.get_frame(0)
+        if test_frame is None:
+            raise ValueError("Empty frame")
+        if clip.duration is None or clip.duration <= 0:
+            raise ValueError("Invalid clip duration")
+        # Catch truncated/corrupt downloads that only fail near the end.
+        check_t = min(max(clip.duration - 0.1, 0.0), clip.duration / 2)
+        mid_frame = clip.get_frame(check_t)
+        if mid_frame is None:
+            raise ValueError("Empty mid/end frame")
+        return clip
+    except Exception as exc:
+        logging.warning("Skipping corrupt clip %s: %s", clip_path.name, exc)
+        if clip is not None:
+            clip.close()
+        clip_path.unlink(missing_ok=True)
+        return None
+
+
+def validate_clip_paths(clip_paths: list[Path]) -> list[Path]:
+    """Return only paths whose cached files load and decode successfully."""
+    valid_paths: list[Path] = []
+    for clip_path in clip_paths:
+        clip = load_valid_videoclip(clip_path)
+        if clip is None:
+            continue
+        clip.close()
+        valid_paths.append(clip_path)
+    return valid_paths
+
+
+def make_gradient_background(duration: float) -> VideoClip:
+    """Fallback background when stock footage is unavailable or corrupt."""
+
+    def frame_function(t: float) -> np.ndarray:
+        del t
+        gradient = np.linspace(0, 1, HEIGHT)[:, np.newaxis]
+        frame = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
+        for channel in range(3):
+            top = BG_TOP[channel]
+            bottom = BG_BOTTOM[channel]
+            frame[:, :, channel] = (top + (bottom - top) * gradient).astype(np.uint8)
+        return frame
+
+    return VideoClip(frame_function, duration=duration)
+
+
 def fit_clip_to_frame(clip: VideoFileClip) -> VideoFileClip:
+    """Scale to cover 1920x1080 using separate width/height resize, then center-crop."""
     clip = clip.without_audio()
-    clip = clip.resized(height=HEIGHT)
-    if clip.w > WIDTH:
+    source_w, source_h = clip.w, clip.h
+    if source_w <= 0 or source_h <= 0:
+        raise ValueError(f"Invalid clip dimensions: {source_w}x{source_h}")
+
+    target_aspect = WIDTH / HEIGHT
+    source_aspect = source_w / source_h
+
+    if source_aspect > target_aspect:
+        clip = clip.resized(height=HEIGHT)
         x_center = clip.w / 2
         clip = clip.cropped(x1=x_center - WIDTH / 2, x2=x_center + WIDTH / 2)
-    elif clip.w < WIDTH:
+    else:
         clip = clip.resized(width=WIDTH)
-        if clip.h > HEIGHT:
-            y_center = clip.h / 2
-            clip = clip.cropped(y1=y_center - HEIGHT / 2, y2=y_center + HEIGHT / 2)
+        y_center = clip.h / 2
+        clip = clip.cropped(y1=y_center - HEIGHT / 2, y2=y_center + HEIGHT / 2)
+
     return clip
 
 
@@ -325,29 +391,71 @@ def extract_clip_segment(source: VideoFileClip, duration: float, offset: float) 
 
 
 def build_stock_video(clip_paths: list[Path], total_duration: float) -> VideoFileClip:
-    """Concatenate 5-8 B-roll clips (cycling as needed) to match voiceover length."""
+    """Concatenate B-roll clips (cycling as needed) to match voiceover length."""
+    valid_paths = validate_clip_paths(clip_paths)
+    if len(valid_paths) < MIN_VALID_CLIPS:
+        logging.warning(
+            "Only %d valid Pexels clip(s) after validation — using gradient fallback",
+            len(valid_paths),
+        )
+        return make_gradient_background(total_duration)
+
     segments: list[VideoFileClip] = []
     elapsed = 0.0
-    clip_index = 0
+    path_index = 0
+    max_iterations = int(total_duration / CLIP_MIN_SEC) + len(valid_paths) * 3
 
-    while elapsed < total_duration - 0.05:
+    while elapsed < total_duration - 0.05 and path_index < max_iterations:
         remaining = total_duration - elapsed
         target = min(random.uniform(CLIP_MIN_SEC, CLIP_MAX_SEC), remaining)
         target = max(target, min(CLIP_MIN_SEC, remaining))
 
-        path = clip_paths[clip_index % len(clip_paths)]
-        source = VideoFileClip(str(path))
-        fitted = fit_clip_to_frame(source)
-        segment = extract_clip_segment(fitted, target, offset=clip_index * 2.5)
-        segments.append(segment)
-        elapsed += segment.duration
-        clip_index += 1
-        source.close()
+        path = valid_paths[path_index % len(valid_paths)]
+        source = load_valid_videoclip(path)
+        path_index += 1
+        if source is None:
+            continue
+
+        try:
+            fitted = fit_clip_to_frame(source)
+            segment = extract_clip_segment(fitted, target, offset=path_index * 2.5)
+            segment = segment.without_audio()
+            test_frame = segment.get_frame(0)
+            if test_frame is None:
+                raise ValueError("Empty segment frame")
+            segments.append(segment)
+            elapsed += segment.duration
+        except Exception as exc:
+            logging.warning("Failed to process clip %s: %s", path.name, exc)
+            path.unlink(missing_ok=True)
+        # Do not close source here — subclips share the parent's reader until render completes.
+
+    if not segments:
+        logging.warning("No valid segments built — using gradient fallback")
+        return make_gradient_background(total_duration)
 
     background = concatenate_videoclips(segments, method="compose")
+    if background.duration is None or background.duration <= 0:
+        logging.warning("Concatenated clip has invalid duration — using gradient fallback")
+        background.close()
+        for segment in segments:
+            segment.close()
+        return make_gradient_background(total_duration)
+
+    try:
+        if background.get_frame(0) is None:
+            raise ValueError("Concatenated clip returned empty frame")
+    except Exception as exc:
+        logging.warning("Concatenated clip failed frame test (%s) — using gradient fallback", exc)
+        background.close()
+        for segment in segments:
+            segment.close()
+        return make_gradient_background(total_duration)
+
     if background.duration > total_duration:
         background = background.subclipped(0, total_duration)
-    return background.with_duration(total_duration)
+    # Ensure no Pexels background music survives into the final mux.
+    return background.without_audio().with_duration(total_duration)
 
 
 def build_dark_overlay(duration: float) -> ColorClip:
