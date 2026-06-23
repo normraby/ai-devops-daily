@@ -2,6 +2,7 @@ client_secret.json
 token.json
 /output/
 /logs/
+assets/pexels_cache/
 __pycache__/
 *.pyc
 .env

@@ -1,5 +1,4 @@
 edge-tts>=6.1.9
-moviepy>=2.0.0
 Pillow>=10.0.0
 google-api-python-client>=2.100.0
 google-auth-httplib2>=0.1.1

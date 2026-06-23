@@ -48,10 +48,31 @@ python upload_to_youtube.py 1
 
 ## GitHub Actions
 
-The workflow runs automatically every **Monday and Thursday at 10:00 AM EST** (15:00 UTC), or manually via **workflow_dispatch**. It processes the next video, uploads to YouTube, and commits the updated `tracker.json`.
+Two workflows run unattended on GitHub:
+
+| Workflow | Schedule | Purpose |
+|----------|----------|---------|
+| `upload.yml` | Mon & Thu 10:00 AM EST | Full pipeline → YouTube upload → tracker commit |
+| `daily-status.yml` | Daily 8:00 AM EST | Summary email of upload progress |
+
+After each upload run, a **pipeline status email** is sent (success or failure). The daily workflow sends a progress summary even when no upload is scheduled.
+
+### GitHub Secrets
+
+| Secret | Purpose |
+|--------|---------|
+| `CLIENT_SECRET_JSON` | YouTube OAuth client credentials |
+| `TOKEN_JSON` | YouTube OAuth refresh token |
+| `PEXELS_API_KEY` | Pexels stock footage API |
+| `SMTP_PASSWORD` | Gmail [App Password](https://myaccount.google.com/apppasswords) for status emails |
+
+Status emails go to **inraby@gmail.com** by default (configured in the workflow).
+
+Manual run: **Actions → AI DevOps Daily Upload → Run workflow** (optional video number override).
 
 ## Requirements
 
 - Python 3.11+
-- FFmpeg (required by MoviePy)
+- FFmpeg (video generation; installed automatically in CI)
 - Google OAuth credentials for YouTube upload
+- Gmail App Password for status emails (optional locally via `.env`)

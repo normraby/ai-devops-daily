@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate MP4 video from Pexels B-roll, voiceover, and lower-third titles."""
+"""Generate MP4 video from Pexels B-roll via ffmpeg (CI-friendly, low memory)."""
 
 from __future__ import annotations
 
@@ -9,25 +9,15 @@ import logging
 import os
 import random
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from urllib.parse import urlparse
 
-import numpy as np
 import requests
 from dotenv import load_dotenv
-from moviepy import (
-    AudioFileClip,
-    ColorClip,
-    CompositeVideoClip,
-    ImageClip,
-    TextClip,
-    VideoClip,
-    VideoFileClip,
-    concatenate_videoclips,
-)
-from moviepy.video.fx import Loop
 
 from script_utils import (
     ASSETS_DIR,
@@ -43,21 +33,14 @@ PEXELS_CACHE_DIR = ASSETS_DIR / "pexels_cache"
 WIDTH, HEIGHT = 1920, 1080
 FPS = 24
 OVERLAY_OPACITY = 0.55
-LOWER_THIRD_HEIGHT = HEIGHT // 4  # bottom 25%
-LOWER_THIRD_TOP = HEIGHT - LOWER_THIRD_HEIGHT
-LOWER_THIRD_MARGIN_X = 80
-TEXT_BASELINE_Y = HEIGHT - 90
 MIN_CLIPS = 5
 MAX_CLIPS = 8
 CLIP_MIN_SEC = 10
 CLIP_MAX_SEC = 15
 PEXELS_SEARCH_URL = "https://api.pexels.com/videos/search"
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(message)s"
-BG_TOP = (13, 17, 23)  # #0D1117
-BG_BOTTOM = (31, 41, 55)  # #1F2937
 MIN_VALID_CLIPS = 2
 
-# Title keyword -> Pexels search queries
 TOPIC_SEARCH_MAP: dict[str, list[str]] = {
     "jenkins": ["jenkins software pipeline", "coding automation server"],
     "terraform": ["terraform infrastructure", "data center cloud servers"],
@@ -135,24 +118,52 @@ def load_pexels_api_key() -> str:
     return api_key
 
 
-def find_font() -> str:
-    candidates = [
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-        "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
-        "/System/Library/Fonts/Helvetica.ttc",
-        "/Library/Fonts/Arial Bold.ttf",
-    ]
-    for path in candidates:
-        if Path(path).exists():
-            return path
-    raise FileNotFoundError(
-        "No suitable font found. Install DejaVu or Arial Bold on the system."
+def ffmpeg_preset() -> str:
+    return "ultrafast" if os.getenv("CI") else "medium"
+
+
+def run_ffmpeg(args: list[str]) -> None:
+    cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", *args]
+    logging.debug("Running: %s", " ".join(cmd))
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr.strip() or "ffmpeg command failed")
+
+
+def get_media_duration(path: Path) -> float:
+    result = subprocess.run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "json",
+            str(path),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
     )
+    data = json.loads(result.stdout)
+    return float(data.get("format", {}).get("duration", 0))
+
+
+def find_font_name() -> str:
+    candidates = [
+        ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", "DejaVu Sans"),
+        ("/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf", "Liberation Sans"),
+        ("/System/Library/Fonts/Supplemental/Arial Bold.ttf", "Arial"),
+        ("/Library/Fonts/Arial Bold.ttf", "Arial"),
+    ]
+    for path, name in candidates:
+        if Path(path).exists():
+            return name
+    return "Sans"
 
 
 def extract_title_keywords(title: str) -> list[str]:
-    """Extract topic keywords from the script TITLE for Pexels searches."""
     title_lower = title.lower()
     queries: list[str] = []
 
@@ -183,7 +194,6 @@ def extract_title_keywords(title: str) -> list[str]:
         if key not in seen:
             seen.add(key)
             unique.append(term)
-
     return unique
 
 
@@ -191,11 +201,9 @@ def pick_video_file_url(video: dict) -> str | None:
     files = video.get("video_files") or []
     if not files:
         return None
-
     landscape = [f for f in files if f.get("width", 0) >= f.get("height", 0)]
     candidates = landscape or files
     candidates.sort(key=lambda f: (f.get("width", 0), f.get("height", 0)), reverse=True)
-
     for candidate in candidates:
         link = candidate.get("link")
         if link:
@@ -207,12 +215,9 @@ def search_pexels_videos(query: str, api_key: str, per_page: int = 20) -> list[d
     headers = {"Authorization": api_key}
     params = {"query": query, "per_page": per_page, "orientation": "landscape"}
     logging.info("Searching Pexels for: %s", query)
-
     response = requests.get(PEXELS_SEARCH_URL, headers=headers, params=params, timeout=30)
     response.raise_for_status()
     videos = response.json().get("videos") or []
-
-    # Prefer clips in the 10-15 second sweet spot (accept 8-30s).
     preferred = [
         v for v in videos
         if CLIP_MIN_SEC - 2 <= v.get("duration", 0) <= CLIP_MAX_SEC + 15
@@ -236,7 +241,6 @@ def download_pexels_clip(url: str, destination: Path) -> Path:
 
     if not destination.exists() or destination.stat().st_size == 0:
         raise RuntimeError(f"Failed to download clip: {url}")
-
     return destination
 
 
@@ -246,7 +250,6 @@ def collect_pexels_clips(
     num_clips: int,
     cache_dir: Path,
 ) -> list[Path]:
-    """Download 5-8 unique stock clips; cache globally under assets/pexels_cache/."""
     downloaded: list[Path] = []
     used_ids: set[int] = set()
     term_index = 0
@@ -269,14 +272,12 @@ def collect_pexels_clips(
             video_id = video.get("id")
             if video_id in used_ids:
                 continue
-
             file_url = pick_video_file_url(video)
             if not file_url:
                 continue
 
             suffix = Path(urlparse(file_url).path).suffix or ".mp4"
             destination = cache_dir / f"pexels_{video_id}{suffix}"
-
             try:
                 download_pexels_clip(file_url, destination)
             except (requests.RequestException, RuntimeError) as exc:
@@ -296,140 +297,92 @@ def collect_pexels_clips(
 
     if len(downloaded) < MIN_CLIPS:
         logging.warning(
-            "Downloaded only %d/%d requested clips; will validate and may fall back to gradient",
+            "Downloaded only %d/%d requested clips; may fall back to solid background",
             len(downloaded),
             num_clips,
         )
-
     return downloaded
 
 
 def probe_video_file(clip_path: Path) -> bool:
-    """Lightweight validity check using ffprobe (avoids loading full clips into memory)."""
     try:
-        result = subprocess.run(
-            [
-                "ffprobe",
-                "-v",
-                "error",
-                "-show_entries",
-                "format=duration",
-                "-of",
-                "json",
-                str(clip_path),
-            ],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            check=True,
-        )
-        data = json.loads(result.stdout)
-        duration = float(data.get("format", {}).get("duration", 0))
-        return duration > 0
+        return get_media_duration(clip_path) > 0
     except Exception as exc:
         logging.warning("ffprobe rejected %s: %s", clip_path.name, exc)
         return False
 
 
-def load_valid_videoclip(clip_path: Path) -> VideoFileClip | None:
-    """Load a VideoFileClip and verify its reader returns valid frames."""
-    clip: VideoFileClip | None = None
-    try:
-        clip = VideoFileClip(str(clip_path))
-        clip = clip.without_audio()  # strip Pexels music — voiceover is the only audio track
-        test_frame = clip.get_frame(0)
-        if test_frame is None:
-            raise ValueError("Empty frame")
-        if clip.duration is None or clip.duration <= 0:
-            raise ValueError("Invalid clip duration")
-        # Catch truncated/corrupt downloads that only fail near the end.
-        check_t = min(max(clip.duration - 0.1, 0.0), clip.duration / 2)
-        mid_frame = clip.get_frame(check_t)
-        if mid_frame is None:
-            raise ValueError("Empty mid/end frame")
-        return clip
-    except Exception as exc:
-        logging.warning("Skipping corrupt clip %s: %s", clip_path.name, exc)
-        if clip is not None:
-            clip.close()
-        clip_path.unlink(missing_ok=True)
-        return None
-
-
 def validate_clip_paths(clip_paths: list[Path]) -> list[Path]:
-    """Return only paths whose cached files are valid video files."""
-    valid_paths: list[Path] = []
+    valid: list[Path] = []
     for clip_path in clip_paths:
-        if not probe_video_file(clip_path):
+        if probe_video_file(clip_path):
+            valid.append(clip_path)
+        else:
             logging.warning("Removing invalid cached clip: %s", clip_path.name)
             clip_path.unlink(missing_ok=True)
-            continue
-        valid_paths.append(clip_path)
-    return valid_paths
+    return valid
 
 
-def make_gradient_background(duration: float) -> VideoClip:
-    """Fallback background when stock footage is unavailable or corrupt."""
+def prepare_segment(
+    source: Path,
+    output: Path,
+    segment_duration: float,
+    start_offset: float,
+) -> None:
+    """Trim, loop, scale, crop, and strip audio from one B-roll segment."""
+    source_duration = get_media_duration(source)
+    preset = ffmpeg_preset()
+    scale_crop = (
+        f"scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase,"
+        f"crop={WIDTH}:{HEIGHT}"
+    )
 
-    def frame_function(t: float) -> np.ndarray:
-        del t
-        gradient = np.linspace(0, 1, HEIGHT)[:, np.newaxis]
-        frame = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
-        for channel in range(3):
-            top = BG_TOP[channel]
-            bottom = BG_BOTTOM[channel]
-            frame[:, :, channel] = (top + (bottom - top) * gradient).astype(np.uint8)
-        return frame
-
-    return VideoClip(frame_function, duration=duration)
-
-
-def fit_clip_to_frame(clip: VideoFileClip) -> VideoFileClip:
-    """Scale to cover 1920x1080 using separate width/height resize, then center-crop."""
-    clip = clip.without_audio()
-    source_w, source_h = clip.w, clip.h
-    if source_w <= 0 or source_h <= 0:
-        raise ValueError(f"Invalid clip dimensions: {source_w}x{source_h}")
-
-    target_aspect = WIDTH / HEIGHT
-    source_aspect = source_w / source_h
-
-    if source_aspect > target_aspect:
-        clip = clip.resized(height=HEIGHT)
-        x_center = clip.w / 2
-        clip = clip.cropped(x1=x_center - WIDTH / 2, x2=x_center + WIDTH / 2)
-    else:
-        clip = clip.resized(width=WIDTH)
-        y_center = clip.h / 2
-        clip = clip.cropped(y1=y_center - HEIGHT / 2, y2=y_center + HEIGHT / 2)
-
-    return clip
+    cmd = ["-y", "-an"]
+    if start_offset > 0:
+        cmd.extend(["-ss", str(start_offset)])
+    if source_duration < segment_duration:
+        cmd.extend(["-stream_loop", "-1"])
+    cmd.extend([
+        "-i", str(source),
+        "-t", str(segment_duration),
+        "-vf", scale_crop,
+        "-r", str(FPS),
+        "-c:v", "libx264",
+        "-preset", preset,
+        "-pix_fmt", "yuv420p",
+        str(output),
+    ])
+    run_ffmpeg(cmd)
 
 
-def extract_clip_segment(source: VideoFileClip, duration: float, offset: float) -> VideoFileClip:
-    """Take a 10-15s segment from source, looping if the file is shorter."""
-    use_duration = min(max(duration, CLIP_MIN_SEC), CLIP_MAX_SEC)
+def build_solid_background(output: Path, duration: float) -> None:
+    preset = ffmpeg_preset()
+    run_ffmpeg([
+        "-y",
+        "-f", "lavfi",
+        "-i", f"color=c=0x0D1117:s={WIDTH}x{HEIGHT}:r={FPS}",
+        "-t", str(duration),
+        "-c:v", "libx264",
+        "-preset", preset,
+        "-pix_fmt", "yuv420p",
+        str(output),
+    ])
 
-    if source.duration >= use_duration:
-        start = min(offset, max(0.0, source.duration - use_duration))
-        segment = source.subclipped(start, start + use_duration)
-    else:
-        segment = source.with_effects([Loop(duration=use_duration)])
 
-    return segment.with_duration(use_duration)
-
-
-def build_stock_video(clip_paths: list[Path], total_duration: float) -> VideoFileClip:
-    """Concatenate B-roll clips (cycling as needed) to match voiceover length."""
+def build_broll_video(
+    clip_paths: list[Path],
+    total_duration: float,
+    work_dir: Path,
+) -> Path:
     valid_paths = validate_clip_paths(clip_paths)
-    if len(valid_paths) < MIN_VALID_CLIPS:
-        logging.warning(
-            "Only %d valid Pexels clip(s) after validation — using gradient fallback",
-            len(valid_paths),
-        )
-        return make_gradient_background(total_duration)
+    concat_out = work_dir / "broll_concat.mp4"
 
-    segments: list[VideoFileClip] = []
+    if len(valid_paths) < MIN_VALID_CLIPS:
+        logging.warning("Using solid background fallback")
+        build_solid_background(concat_out, total_duration)
+        return concat_out
+
+    segment_files: list[Path] = []
     elapsed = 0.0
     path_index = 0
     max_iterations = int(total_duration / CLIP_MIN_SEC) + len(valid_paths) * 3
@@ -439,104 +392,114 @@ def build_stock_video(clip_paths: list[Path], total_duration: float) -> VideoFil
         target = min(random.uniform(CLIP_MIN_SEC, CLIP_MAX_SEC), remaining)
         target = max(target, min(CLIP_MIN_SEC, remaining))
 
-        path = valid_paths[path_index % len(valid_paths)]
-        source = load_valid_videoclip(path)
+        source = valid_paths[path_index % len(valid_paths)]
         path_index += 1
-        if source is None:
-            continue
+        segment_path = work_dir / f"segment_{len(segment_files):03d}.mp4"
 
         try:
-            fitted = fit_clip_to_frame(source)
-            segment = extract_clip_segment(fitted, target, offset=path_index * 2.5)
-            segment = segment.without_audio()
-            test_frame = segment.get_frame(0)
-            if test_frame is None:
-                raise ValueError("Empty segment frame")
-            segments.append(segment)
-            elapsed += segment.duration
+            prepare_segment(source, segment_path, target, offset=path_index * 2.5)
+            segment_files.append(segment_path)
+            elapsed += target
         except Exception as exc:
-            logging.warning("Failed to process clip %s: %s", path.name, exc)
-            path.unlink(missing_ok=True)
-        # Do not close source here — subclips share the parent's reader until render completes.
+            logging.warning("Failed to prepare segment from %s: %s", source.name, exc)
+            source.unlink(missing_ok=True)
 
-    if not segments:
-        logging.warning("No valid segments built — using gradient fallback")
-        return make_gradient_background(total_duration)
+    if not segment_files:
+        logging.warning("No segments built — using solid background fallback")
+        build_solid_background(concat_out, total_duration)
+        return concat_out
 
-    background = concatenate_videoclips(segments, method="compose")
-    if background.duration is None or background.duration <= 0:
-        logging.warning("Concatenated clip has invalid duration — using gradient fallback")
-        background.close()
-        for segment in segments:
-            segment.close()
-        return make_gradient_background(total_duration)
+    list_file = work_dir / "concat.txt"
+    with list_file.open("w", encoding="utf-8") as handle:
+        for segment in segment_files:
+            handle.write(f"file '{segment.resolve()}'\n")
 
+    preset = ffmpeg_preset()
     try:
-        if background.get_frame(0) is None:
-            raise ValueError("Concatenated clip returned empty frame")
-    except Exception as exc:
-        logging.warning("Concatenated clip failed frame test (%s) — using gradient fallback", exc)
-        background.close()
-        for segment in segments:
-            segment.close()
-        return make_gradient_background(total_duration)
+        run_ffmpeg([
+            "-y", "-f", "concat", "-safe", "0", "-i", str(list_file),
+            "-c", "copy", str(concat_out),
+        ])
+    except RuntimeError:
+        logging.info("Concat copy failed — re-encoding segments")
+        run_ffmpeg([
+            "-y", "-f", "concat", "-safe", "0", "-i", str(list_file),
+            "-c:v", "libx264", "-preset", preset, "-pix_fmt", "yuv420p",
+            str(concat_out),
+        ])
 
-    if background.duration > total_duration:
-        background = background.subclipped(0, total_duration)
-    # Ensure no Pexels background music survives into the final mux.
-    return background.without_audio().with_duration(total_duration)
-
-
-def build_dark_overlay(duration: float) -> ColorClip:
-    return (
-        ColorClip(size=(WIDTH, HEIGHT), color=(0, 0, 0))
-        .with_opacity(OVERLAY_OPACITY)
-        .with_duration(duration)
-    )
+    return concat_out
 
 
-def build_lower_third_gradient(duration: float) -> ImageClip:
-    """Subtle dark gradient band in the bottom 25% of the frame."""
-    rgb = np.zeros((LOWER_THIRD_HEIGHT, WIDTH, 3), dtype=np.uint8)
-    alpha = np.linspace(0.0, 0.92, LOWER_THIRD_HEIGHT) ** 1.3
-    mask = np.stack([alpha] * WIDTH, axis=1).astype(float)
-
-    gradient = (
-        ImageClip(rgb)
-        .with_mask(ImageClip(mask, is_mask=True))
-        .with_duration(duration)
-        .with_position((0, LOWER_THIRD_TOP))
-    )
-    return gradient
+def seconds_to_ass(timestamp: float) -> str:
+    hours = int(timestamp // 3600)
+    minutes = int((timestamp % 3600) // 60)
+    seconds = timestamp % 60
+    return f"{hours}:{minutes:02d}:{seconds:05.2f}"
 
 
-def build_lower_third_text_clips(segments: list[dict], font: str) -> list[TextClip]:
-    """White bold section titles in the bottom 25%, timed to voiceover segments."""
-    clips: list[TextClip] = []
+def escape_ass_text(text: str) -> str:
+    return text.replace("\\", "\\\\").replace("{", "\\{").replace("}", "\\}").replace("\n", " ")
 
+
+def write_ass_subtitles(segments: list[dict], ass_path: Path, font_name: str) -> None:
+    header = f"""[Script Info]
+ScriptType: v4.00+
+PlayResX: {WIDTH}
+PlayResY: {HEIGHT}
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: LowerThird,{font_name},44,&H00FFFFFF,&H000000FF,&H00000000,&H96000000,1,0,0,0,100,100,0,0,3,1,0,1,80,80,70,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+"""
+    events: list[str] = []
     for segment in segments:
         start = segment["start"]
         end = segment["end"]
         if end <= start:
             continue
-
-        text = (
-            TextClip(
-                font=font,
-                text=segment["title"],
-                font_size=44,
-                color="white",
-                method="caption",
-                size=(WIDTH - 160, None),
-                text_align="left",
-            )
-            .with_start(start)
-            .with_duration(end - start)
-            .with_position((LOWER_THIRD_MARGIN_X, TEXT_BASELINE_Y))
+        title = escape_ass_text(segment["title"])
+        events.append(
+            f"Dialogue: 0,{seconds_to_ass(start)},{seconds_to_ass(end)},LowerThird,,0,0,0,,{title}"
         )
-        clips.append(text)
 
-    return clips
+    ass_path.write_text(header + "\n".join(events) + "\n", encoding="utf-8")
+
+
+def render_final_video(
+    broll_video: Path,
+    ass_path: Path,
+    audio_path: Path,
+    output_path: Path,
+    duration: float,
+) -> None:
+    preset = ffmpeg_preset()
+    ass_filter = str(ass_path.resolve()).replace("\\", "\\\\").replace(":", "\\:")
+    opacity = OVERLAY_OPACITY
+    filter_complex = (
+        f"color=c=black@{opacity}:s={WIDTH}x{HEIGHT}:d={duration}[blk];"
+        f"[0:v][blk]overlay=format=auto[vdim];"
+        f"[vdim]ass='{ass_filter}'[vout]"
+    )
+
+    run_ffmpeg([
+        "-y",
+        "-i", str(broll_video),
+        "-i", str(audio_path),
+        "-filter_complex", filter_complex,
+        "-map", "[vout]",
+        "-map", "1:a:0",
+        "-c:v", "libx264",
+        "-preset", preset,
+        "-pix_fmt", "yuv420p",
+        "-c:a", "aac",
+        "-b:a", "192k",
+        "-shortest",
+        str(output_path),
+    ])
 
 
 def generate_video(video_number: int) -> str:
@@ -558,46 +521,26 @@ def generate_video(video_number: int) -> str:
 
     search_terms = extract_title_keywords(title)
     num_clips = min(MAX_CLIPS, max(MIN_CLIPS, min(len(segments), MAX_CLIPS) if segments else 6))
-    cache_dir = PEXELS_CACHE_DIR
 
-    font = find_font()
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     output_file = OUTPUT_DIR / f"video_{video_number}.mp4"
+    duration = get_media_duration(audio_file)
 
     logging.info("Generating video for video %s", video_number)
     logging.info("Title: %s", title)
-    logging.info("Title keywords / search terms: %s", search_terms[:num_clips])
-    logging.info("Segments: %d | Stock clips: %d", len(segments), num_clips)
+    logging.info("Duration: %.1fs | Stock clips: %d", duration, num_clips)
+    logging.info("Render engine: ffmpeg (%s preset)", ffmpeg_preset())
 
-    audio = AudioFileClip(str(audio_file))
-    duration = audio.duration
+    clip_paths = collect_pexels_clips(search_terms, api_key, num_clips, PEXELS_CACHE_DIR)
+    work_dir = Path(tempfile.mkdtemp(prefix=f"video_{video_number}_", dir=OUTPUT_DIR))
 
-    clip_paths = collect_pexels_clips(search_terms, api_key, num_clips, cache_dir)
-    background = build_stock_video(clip_paths, duration)
-    overlay = build_dark_overlay(duration)
-    lower_gradient = build_lower_third_gradient(duration)
-    lower_text = build_lower_third_text_clips(segments, font)
-
-    video = CompositeVideoClip(
-        [background, overlay, lower_gradient, *lower_text],
-        size=(WIDTH, HEIGHT),
-    ).with_audio(audio).with_duration(duration)
-
-    logging.info("Rendering video (duration=%.1fs) to %s", duration, output_file)
-    encode_preset = "ultrafast" if os.getenv("CI") else "medium"
-    video.write_videofile(
-        str(output_file),
-        fps=FPS,
-        codec="libx264",
-        audio_codec="aac",
-        preset=encode_preset,
-        threads=2,
-        logger=None,
-    )
-
-    video.close()
-    background.close()
-    audio.close()
+    try:
+        broll_video = build_broll_video(clip_paths, duration, work_dir)
+        ass_path = work_dir / "lower_thirds.ass"
+        write_ass_subtitles(segments, ass_path, find_font_name())
+        render_final_video(broll_video, ass_path, audio_file, output_file, duration)
+    finally:
+        shutil.rmtree(work_dir, ignore_errors=True)
 
     if not output_file.exists() or output_file.stat().st_size == 0:
         raise RuntimeError(f"Video generation failed: {output_file}")
@@ -609,7 +552,7 @@ def generate_video(video_number: int) -> str:
 
 def main() -> int:
     setup_logging()
-    parser = argparse.ArgumentParser(description="Generate MP4 with Pexels B-roll")
+    parser = argparse.ArgumentParser(description="Generate MP4 with Pexels B-roll (ffmpeg)")
     parser.add_argument("video_number", type=int, help="Video number (e.g. 3)")
     args = parser.parse_args()
 

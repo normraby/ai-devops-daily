@@ -26,8 +26,8 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install FFmpeg
-        run: sudo apt-get install -y ffmpeg
+      - name: Install FFmpeg and fonts
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg fonts-dejavu-core
 
       - name: Install Python dependencies
         run: pip install -r requirements.txt
@@ -45,9 +45,16 @@ jobs:
       - name: Write .env
         env:
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
-        run: printf 'PEXELS_API_KEY=%s' "$PEXELS_API_KEY" > .env
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+        run: |
+          printf 'PEXELS_API_KEY=%s\n' "$PEXELS_API_KEY" > .env
+          printf 'SMTP_PASSWORD=%s\n' "$SMTP_PASSWORD" >> .env
+          printf 'SMTP_USERNAME=inraby@gmail.com\n' >> .env
+          printf 'EMAIL_TO=inraby@gmail.com\n' >> .env
 
       - name: Run pipeline
+        id: pipeline
+        continue-on-error: true
         run: |
           if [ -n "${{ github.event.inputs.video_number }}" ]; then
             python run_pipeline.py --video ${{ github.event.inputs.video_number }}
@@ -56,9 +63,21 @@ jobs:
           fi
 
       - name: Commit and push tracker.json
+        if: steps.pipeline.outcome == 'success'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add tracker.json
           git diff --staged --quiet || git commit -m "chore: update tracker after pipeline run [skip ci]"
           git push
+
+      - name: Send pipeline status email
+        if: always()
+        continue-on-error: true
+        env:
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+        run: python send_status_email.py --mode pipeline
+
+      - name: Fail job if pipeline failed
+        if: steps.pipeline.outcome != 'success'
+        run: exit 1
