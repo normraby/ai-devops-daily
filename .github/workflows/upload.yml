@@ -38,6 +38,9 @@ jobs:
       - name: Write token.json
         run: echo '${{ secrets.TOKEN_JSON }}' > token.json
 
+      - name: Write .env
+        run: echo "PEXELS_API_KEY=${{ secrets.PEXELS_API_KEY }}" > .env
+
       - name: Run pipeline
         run: |
           if [ -n "${{ github.event.inputs.video_number }}" ]; then
