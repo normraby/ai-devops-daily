@@ -4,10 +4,12 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import random
 import re
+import subprocess
 import sys
 from pathlib import Path
 from urllib.parse import urlparse
@@ -302,6 +304,33 @@ def collect_pexels_clips(
     return downloaded
 
 
+def probe_video_file(clip_path: Path) -> bool:
+    """Lightweight validity check using ffprobe (avoids loading full clips into memory)."""
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "json",
+                str(clip_path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=True,
+        )
+        data = json.loads(result.stdout)
+        duration = float(data.get("format", {}).get("duration", 0))
+        return duration > 0
+    except Exception as exc:
+        logging.warning("ffprobe rejected %s: %s", clip_path.name, exc)
+        return False
+
+
 def load_valid_videoclip(clip_path: Path) -> VideoFileClip | None:
     """Load a VideoFileClip and verify its reader returns valid frames."""
     clip: VideoFileClip | None = None
@@ -328,13 +357,13 @@ def load_valid_videoclip(clip_path: Path) -> VideoFileClip | None:
 
 
 def validate_clip_paths(clip_paths: list[Path]) -> list[Path]:
-    """Return only paths whose cached files load and decode successfully."""
+    """Return only paths whose cached files are valid video files."""
     valid_paths: list[Path] = []
     for clip_path in clip_paths:
-        clip = load_valid_videoclip(clip_path)
-        if clip is None:
+        if not probe_video_file(clip_path):
+            logging.warning("Removing invalid cached clip: %s", clip_path.name)
+            clip_path.unlink(missing_ok=True)
             continue
-        clip.close()
         valid_paths.append(clip_path)
     return valid_paths
 
@@ -555,11 +584,14 @@ def generate_video(video_number: int) -> str:
     ).with_audio(audio).with_duration(duration)
 
     logging.info("Rendering video (duration=%.1fs) to %s", duration, output_file)
+    encode_preset = "ultrafast" if os.getenv("CI") else "medium"
     video.write_videofile(
         str(output_file),
         fps=FPS,
         codec="libx264",
         audio_codec="aac",
+        preset=encode_preset,
+        threads=2,
         logger=None,
     )
 
