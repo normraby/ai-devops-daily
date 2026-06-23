@@ -48,6 +48,23 @@ def write_run_status(payload: dict) -> None:
     STATUS_FILE.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
+def parse_step_json(stdout: str) -> dict | None:
+    text = stdout.strip()
+    if not text:
+        return None
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        start = text.find("{")
+        end = text.rfind("}")
+        if start >= 0 and end > start:
+            try:
+                return json.loads(text[start : end + 1])
+            except json.JSONDecodeError:
+                return None
+    return None
+
+
 def run_step(script_name: str, video_number: int) -> dict | None:
     command = [sys.executable, str(PROJECT_ROOT / script_name), str(video_number)]
     logging.info("Running: %s", " ".join(command))
@@ -60,10 +77,7 @@ def run_step(script_name: str, video_number: int) -> dict | None:
         raise RuntimeError(f"{script_name} failed with exit code {result.returncode}")
 
     if script_name == "upload_to_youtube.py" and result.stdout.strip():
-        try:
-            return json.loads(result.stdout.strip())
-        except json.JSONDecodeError:
-            return None
+        return parse_step_json(result.stdout)
     return None
 
 

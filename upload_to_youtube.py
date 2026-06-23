@@ -36,7 +36,7 @@ def setup_logging() -> None:
         level=logging.INFO,
         format=LOG_FORMAT,
         handlers=[
-            logging.StreamHandler(sys.stdout),
+            logging.StreamHandler(sys.stderr),
             logging.FileHandler(UPLOAD_LOG),
         ],
     )
