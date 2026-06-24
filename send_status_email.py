@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Send pipeline and daily status emails."""
+"""Send pipeline and daily status emails via Gmail API or SMTP fallback."""
 
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import logging
 import os
@@ -15,7 +16,9 @@ from email.mime.text import MIMEText
 from pathlib import Path
 
 from dotenv import load_dotenv
+from googleapiclient.discovery import build
 
+from google_auth import TOKEN_FILE, has_gmail_scope, load_credentials
 from script_utils import LOGS_DIR, parse_header, script_path
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -36,42 +39,76 @@ def setup_logging() -> None:
     logging.basicConfig(
         level=logging.INFO,
         format=LOG_FORMAT,
-        handlers=[logging.StreamHandler(sys.stdout)],
+        handlers=[logging.StreamHandler(sys.stderr)],
     )
 
 
-def load_smtp_config() -> dict:
-    load_dotenv(PROJECT_ROOT / ".env")
-    password = os.getenv("SMTP_PASSWORD", "").strip()
-    if not password:
-        raise EnvironmentError(
-            "SMTP_PASSWORD not set. Add a Gmail App Password to .env or GitHub Secrets."
-        )
-    return {
-        "host": os.getenv("SMTP_HOST", DEFAULT_SMTP_HOST),
-        "port": int(os.getenv("SMTP_PORT", str(DEFAULT_SMTP_PORT))),
-        "username": os.getenv("SMTP_USERNAME", DEFAULT_FROM),
-        "password": password,
-        "to": os.getenv("EMAIL_TO", DEFAULT_TO),
-        "from": os.getenv("EMAIL_FROM", os.getenv("SMTP_USERNAME", DEFAULT_FROM)),
-    }
-
-
-def send_email(subject: str, body_text: str, body_html: str | None = None) -> None:
-    cfg = load_smtp_config()
+def build_message(subject: str, body_text: str, body_html: str | None, to: str, from_addr: str) -> MIMEMultipart:
     message = MIMEMultipart("alternative")
     message["Subject"] = subject
-    message["From"] = cfg["from"]
-    message["To"] = cfg["to"]
+    message["From"] = from_addr
+    message["To"] = to
     message.attach(MIMEText(body_text, "plain"))
     if body_html:
         message.attach(MIMEText(body_html, "html"))
+    return message
 
-    logging.info("Sending email to %s: %s", cfg["to"], subject)
-    with smtplib.SMTP(cfg["host"], cfg["port"]) as server:
+
+def send_via_gmail_api(subject: str, body_text: str, body_html: str | None = None) -> None:
+    if not TOKEN_FILE.exists():
+        raise EnvironmentError(f"Missing {TOKEN_FILE} for Gmail API send")
+
+    creds = load_credentials()
+    if not has_gmail_scope(creds):
+        raise EnvironmentError(
+            "OAuth token missing gmail.send scope. Run: python authorize_google.py"
+        )
+
+    to = os.getenv("EMAIL_TO", DEFAULT_TO)
+    message = build_message(subject, body_text, body_html, to, DEFAULT_FROM)
+    raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
+    service = build("gmail", "v1", credentials=creds, cache_discovery=False)
+    logging.info("Sending email via Gmail API to %s: %s", to, subject)
+    service.users().messages().send(userId="me", body={"raw": raw}).execute()
+
+
+def send_via_smtp(subject: str, body_text: str, body_html: str | None = None) -> None:
+    load_dotenv(PROJECT_ROOT / ".env")
+    password = os.getenv("SMTP_PASSWORD", "").strip()
+    if not password:
+        raise EnvironmentError("SMTP_PASSWORD not set")
+
+    to = os.getenv("EMAIL_TO", DEFAULT_TO)
+    from_addr = os.getenv("EMAIL_FROM", os.getenv("SMTP_USERNAME", DEFAULT_FROM))
+    message = build_message(subject, body_text, body_html, to, from_addr)
+
+    host = os.getenv("SMTP_HOST", DEFAULT_SMTP_HOST)
+    port = int(os.getenv("SMTP_PORT", str(DEFAULT_SMTP_PORT)))
+    username = os.getenv("SMTP_USERNAME", DEFAULT_FROM)
+
+    logging.info("Sending email via SMTP to %s: %s", to, subject)
+    with smtplib.SMTP(host, port) as server:
         server.starttls()
-        server.login(cfg["username"], cfg["password"])
-        server.sendmail(cfg["from"], [cfg["to"]], message.as_string())
+        server.login(username, password)
+        server.sendmail(from_addr, [to], message.as_string())
+
+
+def send_email(subject: str, body_text: str, body_html: str | None = None) -> None:
+    """Prefer Gmail API (uses TOKEN_JSON); fall back to SMTP if configured."""
+    load_dotenv(PROJECT_ROOT / ".env")
+    smtp_password = os.getenv("SMTP_PASSWORD", "").strip()
+
+    if TOKEN_FILE.exists():
+        try:
+            send_via_gmail_api(subject, body_text, body_html)
+            return
+        except Exception as exc:
+            if smtp_password:
+                logging.warning("Gmail API send failed (%s); trying SMTP", exc)
+            else:
+                raise
+
+    send_via_smtp(subject, body_text, body_html)
 
 
 def load_tracker() -> dict:
@@ -109,7 +146,7 @@ def build_pipeline_report() -> tuple[str, str, str]:
     subject = f"AI DevOps Daily — {subject_prefix} — Video {video_number}"
 
     text_lines = [
-        f"AI DevOps Daily Pipeline Report",
+        "AI DevOps Daily Pipeline Report",
         f"Time: {now}",
         f"Status: {run_status}",
         f"Video: {video_number}",

@@ -20,16 +20,17 @@ jobs:
           python-version: "3.11"
 
       - name: Install Python dependencies
-        run: pip install python-dotenv
+        run: pip install -r requirements.txt
+
+      - name: Write token.json
+        env:
+          TOKEN_JSON: ${{ secrets.TOKEN_JSON }}
+        run: printf '%s' "$TOKEN_JSON" > token.json
 
       - name: Write .env
-        env:
-          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
         run: |
-          printf 'SMTP_PASSWORD=%s\n' "$SMTP_PASSWORD" > .env
-          printf 'SMTP_USERNAME=inraby@gmail.com\n' >> .env
-          printf 'EMAIL_TO=inraby@gmail.com\n' >> .env
+          printf 'EMAIL_TO=inraby@gmail.com\n' > .env
+          printf 'SMTP_PASSWORD=%s\n' "${{ secrets.SMTP_PASSWORD }}" >> .env
 
       - name: Send daily status email
-        continue-on-error: true
         run: python send_status_email.py --mode daily

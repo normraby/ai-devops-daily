@@ -43,12 +43,7 @@ jobs:
         run: printf '%s' "$TOKEN_JSON" > token.json
 
       - name: Write .env
-        env:
-          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
-        run: |
-          printf 'SMTP_PASSWORD=%s\n' "$SMTP_PASSWORD" > .env
-          printf 'SMTP_USERNAME=inraby@gmail.com\n' >> .env
-          printf 'EMAIL_TO=inraby@gmail.com\n' >> .env
+        run: printf 'EMAIL_TO=inraby@gmail.com\n' > .env
 
       - name: Run pipeline
         id: pipeline
@@ -71,9 +66,6 @@ jobs:
 
       - name: Send pipeline status email
         if: always()
-        continue-on-error: true
-        env:
-          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
         run: python send_status_email.py --mode pipeline
 
       - name: Fail job if pipeline failed
