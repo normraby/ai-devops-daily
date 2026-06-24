@@ -20,16 +20,20 @@
       "url": "https://www.youtube.com/watch?v=AbzKHaTCjW4"
     },
     "4": {
-      "processed_at": "2026-06-23T15:52:55.220576+00:00",
+      "processed_at": "2026-06-24T19:22:35.013563+00:00",
       "status": "uploaded",
-      "video_id": "ri5aPyLn5WI",
-      "url": "https://www.youtube.com/watch?v=ri5aPyLn5WI"
+      "video_id": "-JpiKxSF9Qs",
+      "url": "https://www.youtube.com/watch?v=-JpiKxSF9Qs",
+      "regenerated_at": "2026-06-24T19:22:35.013563+00:00",
+      "replaced_video_id": "ri5aPyLn5WI"
     },
     "5": {
-      "processed_at": "2026-06-23T16:05:57.350603+00:00",
+      "processed_at": "2026-06-24T19:23:34.202992+00:00",
       "status": "uploaded",
-      "video_id": "mJTbgB83Db8",
-      "url": "https://www.youtube.com/watch?v=mJTbgB83Db8"
+      "video_id": "KaRwO_DiZG4",
+      "url": "https://www.youtube.com/watch?v=KaRwO_DiZG4",
+      "regenerated_at": "2026-06-24T19:23:34.202992+00:00",
+      "replaced_video_id": "mJTbgB83Db8"
     }
   }
 }
