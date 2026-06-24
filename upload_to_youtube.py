@@ -29,6 +29,12 @@ PRIVACY_STATUS = "public"
 MAX_RETRIES = 3
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(message)s"
 
+DESCRIPTION_FOOTER = """
+
+---
+Original educational content by AI DevOps Daily. Code examples and diagrams are authored for teaching standard DevOps patterns. Illustrative metrics and scenarios are explained in the narration — not third-party survey data. We are not affiliated with vendors mentioned. Not financial, legal, or professional advice.
+"""
+
 
 def setup_logging() -> None:
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
@@ -141,7 +147,7 @@ def upload_to_youtube(video_number: int) -> dict:
     header = parse_header(content)
     metadata = {
         "title": header.get("title") or f"AI DevOps Daily #{video_number}",
-        "description": header.get("description") or "AI DevOps Daily — automation insights for platform engineers.",
+        "description": (header.get("description") or "AI DevOps Daily — automation insights for platform engineers.") + DESCRIPTION_FOOTER,
         "tags": parse_tags(header.get("tags", "")),
     }
 

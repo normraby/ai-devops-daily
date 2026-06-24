@@ -95,20 +95,63 @@ def extract_voiceover_text(content: str) -> str:
 
 def parse_timestamps(content: str) -> list[dict[str, Any]]:
     """Parse timestamp ranges and section titles for on-screen overlays."""
+    return [
+        {
+            "start": segment["start"],
+            "end": segment["end"],
+            "title": segment["title"],
+        }
+        for segment in parse_segments(content)
+    ]
+
+
+def parse_segments(content: str) -> list[dict[str, Any]]:
+    """Parse SCRIPT segments with title, visual direction, and voiceover text."""
     script = parse_script_section(content)
     segments: list[dict[str, Any]] = []
+    current: dict[str, Any] | None = None
+    field: str | None = None
 
     for line in script.splitlines():
-        match = TIMESTAMP_PATTERN.match(line.strip())
+        stripped = line.strip()
+        if not stripped:
+            continue
+
+        match = TIMESTAMP_PATTERN.match(stripped)
         if match:
+            if current:
+                segments.append(current)
             start, end, title = match.groups()
-            segments.append(
-                {
-                    "start": _time_to_seconds(start),
-                    "end": _time_to_seconds(end),
-                    "title": title.strip(),
-                }
-            )
+            current = {
+                "start": _time_to_seconds(start),
+                "end": _time_to_seconds(end),
+                "title": title.strip(),
+                "visual": "",
+                "voiceover": "",
+            }
+            field = None
+            continue
+
+        if current is None:
+            continue
+
+        lower = stripped.lower()
+        if lower.startswith("visual:"):
+            current["visual"] = stripped.split(":", 1)[1].strip()
+            field = "visual"
+            continue
+        if lower.startswith("voiceover:"):
+            current["voiceover"] = stripped.split(":", 1)[1].strip()
+            field = "voiceover"
+            continue
+
+        if field == "visual":
+            current["visual"] = f"{current['visual']} {stripped}".strip()
+        elif field == "voiceover":
+            current["voiceover"] = f"{current['voiceover']} {stripped}".strip()
+
+    if current:
+        segments.append(current)
     return segments
 
 

@@ -11,7 +11,8 @@ ai-devops-daily/
 ├── output/            # Generated MP3, MP4, JPG (gitignored)
 ├── logs/              # Pipeline and upload logs (gitignored)
 ├── generate_voiceover.py
-├── generate_video.py
+├── generate_video.py      # Renders Visual: slides → MP4 (diagrams, charts, docs)
+├── visual_slides.py       # Slide renderer (flow diagrams, charts, tables, timelines)
 ├── generate_thumbnail.py
 ├── upload_to_youtube.py
 ├── run_pipeline.py
@@ -63,16 +64,37 @@ After each upload run, a **pipeline status email** is sent (success or failure).
 |--------|---------|
 | `CLIENT_SECRET_JSON` | YouTube OAuth client credentials |
 | `TOKEN_JSON` | YouTube OAuth refresh token |
-| `PEXELS_API_KEY` | Pexels stock footage API |
 | `SMTP_PASSWORD` | Gmail [App Password](https://myaccount.google.com/apppasswords) for status emails |
 
 Status emails go to **inraby@gmail.com** by default (configured in the workflow).
 
 Manual run: **Actions → AI DevOps Daily Upload → Run workflow** (optional video number override).
 
+## Video generation
+
+Videos are built from each script's **Visual:** directions — not stock footage. Each timestamp segment becomes a slide with topic-specific content:
+
+- **Flow / architecture diagrams** from arrow chains in the script
+- **Bar and line charts** from metrics mentioned in the narration
+- **Comparison tables**, card layouts, timelines, and directory trees
+- **Documentation-style panels** for technical reference content
+
+Slides are rendered with Pillow + matplotlib, animated with a subtle zoom via ffmpeg, and synced to the voiceover.
+
+### Content & compliance
+
+All visuals are **originally generated** for this channel:
+
+- No stock footage, scraped screenshots, or third-party copyrighted assets
+- Code examples are minimal teaching snippets (standard IaC / CI patterns, original wording)
+- Charts are illustrative and labeled — aligned with narration, not presented as external surveys
+- Case studies are hypothetical learning scenarios, not endorsements
+- Official documentation is cited as text links only (no copied doc pages)
+- YouTube descriptions include an educational disclaimer on every upload
+
 ## Requirements
 
 - Python 3.11+
-- FFmpeg (video generation; installed automatically in CI)
+- FFmpeg (installed automatically in CI)
 - Google OAuth credentials for YouTube upload
 - Gmail App Password for status emails (optional locally via `.env`)
