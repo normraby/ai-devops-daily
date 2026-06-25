@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Send pipeline and daily status emails via Gmail API or SMTP fallback."""
+"""Send pipeline and daily status emails via OAuth SMTP, app password, or Gmail API."""
 
 from __future__ import annotations
 
@@ -161,9 +161,51 @@ def send_via_gmail_api(subject: str, body_text: str, body_html: str | None = Non
         raise
 
 
+def smtp_password_from_env() -> str:
+    return os.getenv("SMTP_PASSWORD", "").strip().replace(" ", "")
+
+
+def smtp_xoauth2_string(username: str, access_token: str) -> str:
+    auth_str = f"user={username}\x01auth=Bearer {access_token}\x01\x01"
+    return base64.b64encode(auth_str.encode()).decode()
+
+
+def send_via_smtp_oauth(subject: str, body_text: str, body_html: str | None = None) -> None:
+    """Send via Gmail SMTP using the same OAuth token as YouTube uploads."""
+    if not TOKEN_FILE.exists():
+        raise EnvironmentError(f"Missing {TOKEN_FILE} for OAuth SMTP send")
+
+    creds = load_credentials()
+    if not has_gmail_scope(creds):
+        raise EnvironmentError(
+            "OAuth token missing gmail.send scope. Run: python authorize_google.py"
+        )
+    if not creds.token:
+        raise EnvironmentError("OAuth access token missing after refresh")
+
+    load_dotenv(PROJECT_ROOT / ".env")
+    to = os.getenv("EMAIL_TO", DEFAULT_TO)
+    from_addr = get_oauth_account_email(creds)
+    message = build_message(subject, body_text, body_html, to, from_addr)
+
+    host = os.getenv("SMTP_HOST", DEFAULT_SMTP_HOST)
+    port = int(os.getenv("SMTP_PORT", str(DEFAULT_SMTP_PORT)))
+
+    logging.info("Sending email via OAuth SMTP from %s to %s: %s", from_addr, to, subject)
+    with smtplib.SMTP(host, port, timeout=30) as server:
+        server.ehlo()
+        server.starttls()
+        server.ehlo()
+        auth_b64 = smtp_xoauth2_string(from_addr, creds.token)
+        code, response = server.docmd("AUTH", "XOAUTH2 " + auth_b64)
+        if code != 235:
+            raise smtplib.SMTPAuthenticationError(code, response)
+        server.sendmail(from_addr, [to], message.as_string())
+
+
 def send_via_smtp(subject: str, body_text: str, body_html: str | None = None) -> None:
     load_dotenv(PROJECT_ROOT / ".env")
-    password = os.getenv("SMTP_PASSWORD", "").strip().replace(" ", "")
+    password = smtp_password_from_env()
     if not password:
         raise EnvironmentError(
             "SMTP_PASSWORD not set. Add a Gmail App Password to .env or the "
@@ -186,18 +228,33 @@ def send_via_smtp(subject: str, body_text: str, body_html: str | None = None) ->
 
 
 def send_email(subject: str, body_text: str, body_html: str | None = None) -> None:
-    """Prefer SMTP when configured; otherwise use Gmail API via TOKEN_JSON."""
+    """Prefer OAuth SMTP (TOKEN_JSON), then app password, then Gmail API."""
     load_dotenv(PROJECT_ROOT / ".env")
-    smtp_password = os.getenv("SMTP_PASSWORD", "").strip().replace(" ", "")
+    smtp_password = smtp_password_from_env()
+    errors: list[Exception] = []
+
+    if TOKEN_FILE.exists():
+        try:
+            send_via_smtp_oauth(subject, body_text, body_html)
+            return
+        except Exception as exc:
+            errors.append(exc)
+            logging.warning("OAuth SMTP send failed (%s)", exc)
 
     if smtp_password:
-        send_via_smtp(subject, body_text, body_html)
-        return
+        try:
+            send_via_smtp(subject, body_text, body_html)
+            return
+        except Exception as exc:
+            errors.append(exc)
+            logging.warning("App-password SMTP send failed (%s)", exc)
 
     if TOKEN_FILE.exists():
         send_via_gmail_api(subject, body_text, body_html)
         return
 
+    if errors:
+        raise errors[-1]
     send_via_smtp(subject, body_text, body_html)
 
 
