@@ -87,11 +87,12 @@ def get_oauth_account_email(creds) -> str:
     return email
 
 
-def encode_gmail_raw(subject: str, body_text: str, body_html: str | None, to: str, from_addr: str) -> str:
+def encode_gmail_raw(subject: str, body_text: str, body_html: str | None, to: str, from_addr: str | None = None) -> str:
     """Build a RFC 2822 message and base64url-encode it for Gmail API."""
     message = EmailMessage()
     message["To"] = to
-    message["From"] = from_addr
+    if from_addr:
+        message["From"] = from_addr
     message["Subject"] = subject
     if body_html:
         message.set_content(body_text, subtype="plain", charset="utf-8")
@@ -144,17 +145,17 @@ def send_via_gmail_api(subject: str, body_text: str, body_html: str | None = Non
         )
 
     to = os.getenv("EMAIL_TO", DEFAULT_TO)
-    from_addr = get_oauth_account_email(creds)
-    raw = encode_gmail_raw(subject, body_text, body_html, to, from_addr)
+    get_oauth_account_email(creds)  # logs scopes; warns if identity unclear
+    raw = encode_gmail_raw(subject, body_text, body_html, to)
     service = build("gmail", "v1", credentials=creds, cache_discovery=False)
-    logging.info("Sending email via Gmail API from %s to %s: %s", from_addr, to, subject)
+    logging.info("Sending email via Gmail API to %s: %s", to, subject)
     try:
         service.users().messages().send(userId="me", body={"raw": raw}).execute()
     except HttpError as exc:
         configured = gmail_api_not_enabled_error(exc)
         if configured:
             raise configured from exc
-        precondition = gmail_send_precondition_error(exc, from_addr)
+        precondition = gmail_send_precondition_error(exc, DEFAULT_TO)
         if precondition:
             raise precondition from exc
         raise
