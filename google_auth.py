@@ -16,13 +16,19 @@ TOKEN_FILE = PROJECT_ROOT / "token.json"
 SCOPES = [
     "https://www.googleapis.com/auth/youtube.upload",
     "https://www.googleapis.com/auth/gmail.send",
+    "openid",
+    "https://www.googleapis.com/auth/userinfo.email",
 ]
 
 
 def load_credentials() -> Credentials:
     creds = None
+    scopes = list(SCOPES)
     if TOKEN_FILE.exists():
-        creds = Credentials.from_authorized_user_file(str(TOKEN_FILE), SCOPES)
+        token_data = json.loads(TOKEN_FILE.read_text(encoding="utf-8"))
+        if token_data.get("scopes"):
+            scopes = token_data["scopes"]
+        creds = Credentials.from_authorized_user_file(str(TOKEN_FILE), scopes)
 
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:

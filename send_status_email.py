@@ -64,27 +64,52 @@ def build_message(subject: str, body_text: str, body_html: str | None, to: str, 
 
 def get_oauth_account_email(creds) -> str:
     """Resolve the Google account tied to the OAuth access token."""
+    configured = os.getenv("OAUTH_SENDER_EMAIL", os.getenv("SMTP_USERNAME", "")).strip()
+    if configured:
+        return configured
+
     if not creds.token:
         raise EnvironmentError("OAuth access token missing after refresh")
+
+    for url in (
+        "https://www.googleapis.com/oauth2/v3/userinfo",
+        "https://openidconnect.googleapis.com/v1/userinfo",
+    ):
+        try:
+            req = urllib.request.Request(
+                url,
+                headers={"Authorization": f"Bearer {creds.token}"},
+            )
+            with urllib.request.urlopen(req, timeout=15) as response:
+                payload = json.loads(response.read().decode())
+            email = payload.get("email", "").strip()
+            if email:
+                logging.info("Resolved OAuth sender email via userinfo")
+                return email
+        except Exception as exc:
+            logging.debug("userinfo lookup failed for %s: %s", url, exc)
+
     url = f"https://oauth2.googleapis.com/tokeninfo?access_token={creds.token}"
     try:
         with urllib.request.urlopen(url, timeout=15) as response:
             payload = json.loads(response.read().decode())
     except urllib.error.HTTPError as exc:
         raise EnvironmentError(f"Could not verify OAuth account: {exc}") from exc
-    email = payload.get("email", "").strip()
+
     scopes = payload.get("scope", "")
     logging.info("OAuth token scopes: %s", scopes)
-    if not email:
-        fallback = os.getenv("EMAIL_FROM", DEFAULT_FROM)
-        logging.warning(
-            "OAuth tokeninfo did not return email; using configured sender %s. "
-            "Re-run authorize_google.py signed in as %s and update TOKEN_JSON.",
-            fallback,
-            DEFAULT_TO,
-        )
-        return fallback
-    return email
+    email = payload.get("email", "").strip()
+    if email:
+        return email
+
+    fallback = os.getenv("EMAIL_FROM", DEFAULT_FROM)
+    logging.warning(
+        "OAuth identity unknown; using configured sender %s. "
+        "Run: python authorize_google.py (sign in as %s), then update TOKEN_JSON.",
+        fallback,
+        DEFAULT_TO,
+    )
+    return fallback
 
 
 def encode_gmail_raw(subject: str, body_text: str, body_html: str | None, to: str, from_addr: str | None = None) -> str:
