@@ -41,9 +41,10 @@ python upload_to_youtube.py 1
 ## YouTube OAuth Setup
 
 1. Create a project in [Google Cloud Console](https://console.cloud.google.com/)
-2. Enable the **YouTube Data API v3**
+2. Enable **YouTube Data API v3** and **Gmail API** in the same project
+   - Gmail API: https://console.cloud.google.com/apis/library/gmail.googleapis.com?project=ai-devops-daily
 3. Create OAuth 2.0 credentials (Desktop app) and download as `client_secret.json`
-4. Run `python upload_to_youtube.py 1` locally once to authenticate
+4. Run `python authorize_google.py` locally to grant YouTube upload + Gmail send scopes
 5. Copy the contents of `token.json` to the GitHub secret `TOKEN_JSON`
 6. Copy the contents of `client_secret.json` to the GitHub secret `CLIENT_SECRET_JSON`
 
@@ -64,7 +65,7 @@ After each upload run, a **pipeline status email** is sent (success or failure).
 |--------|---------|
 | `CLIENT_SECRET_JSON` | YouTube OAuth client credentials |
 | `TOKEN_JSON` | YouTube OAuth refresh token |
-| `SMTP_PASSWORD` | Gmail [App Password](https://myaccount.google.com/apppasswords) for status emails |
+| `SMTP_PASSWORD` | Optional fallback: Gmail [App Password](https://myaccount.google.com/apppasswords) if Gmail API send fails |
 
 Status emails go to **inraby@gmail.com** by default (configured in the workflow).
 

@@ -17,6 +17,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
 from google_auth import TOKEN_FILE, has_gmail_scope, load_credentials
 from script_utils import LOGS_DIR, parse_header, script_path
@@ -30,6 +31,10 @@ DEFAULT_TO = "inraby@gmail.com"
 DEFAULT_FROM = "inraby@gmail.com"
 DEFAULT_SMTP_HOST = "smtp.gmail.com"
 DEFAULT_SMTP_PORT = 587
+GMAIL_API_ENABLE_URL = (
+    "https://console.cloud.google.com/apis/library/gmail.googleapis.com"
+    "?project=ai-devops-daily"
+)
 
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(message)s"
 
@@ -54,6 +59,26 @@ def build_message(subject: str, body_text: str, body_html: str | None, to: str, 
     return message
 
 
+def gmail_api_not_enabled_error(exc: HttpError) -> EnvironmentError | None:
+    """Return a clearer error when Gmail API is disabled in Google Cloud."""
+    try:
+        details = exc.error_details if hasattr(exc, "error_details") else []
+    except Exception:
+        details = []
+    for detail in details:
+        if detail.get("reason") == "accessNotConfigured":
+            return EnvironmentError(
+                "Gmail API is not enabled for the ai-devops-daily Google Cloud project. "
+                f"Enable it here, wait a minute, then retry: {GMAIL_API_ENABLE_URL}"
+            )
+    if "accessNotConfigured" in str(exc) or "Gmail API has not been used" in str(exc):
+        return EnvironmentError(
+            "Gmail API is not enabled for the ai-devops-daily Google Cloud project. "
+            f"Enable it here, wait a minute, then retry: {GMAIL_API_ENABLE_URL}"
+        )
+    return None
+
+
 def send_via_gmail_api(subject: str, body_text: str, body_html: str | None = None) -> None:
     if not TOKEN_FILE.exists():
         raise EnvironmentError(f"Missing {TOKEN_FILE} for Gmail API send")
@@ -69,14 +94,23 @@ def send_via_gmail_api(subject: str, body_text: str, body_html: str | None = Non
     raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
     service = build("gmail", "v1", credentials=creds, cache_discovery=False)
     logging.info("Sending email via Gmail API to %s: %s", to, subject)
-    service.users().messages().send(userId="me", body={"raw": raw}).execute()
+    try:
+        service.users().messages().send(userId="me", body={"raw": raw}).execute()
+    except HttpError as exc:
+        configured = gmail_api_not_enabled_error(exc)
+        if configured:
+            raise configured from exc
+        raise
 
 
 def send_via_smtp(subject: str, body_text: str, body_html: str | None = None) -> None:
     load_dotenv(PROJECT_ROOT / ".env")
     password = os.getenv("SMTP_PASSWORD", "").strip()
     if not password:
-        raise EnvironmentError("SMTP_PASSWORD not set")
+        raise EnvironmentError(
+            "SMTP_PASSWORD not set. Add a Gmail App Password to .env or the "
+            "SMTP_PASSWORD GitHub secret, or enable Gmail API for OAuth send."
+        )
 
     to = os.getenv("EMAIL_TO", DEFAULT_TO)
     from_addr = os.getenv("EMAIL_FROM", os.getenv("SMTP_USERNAME", DEFAULT_FROM))

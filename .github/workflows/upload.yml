@@ -43,7 +43,9 @@ jobs:
         run: printf '%s' "$TOKEN_JSON" > token.json
 
       - name: Write .env
-        run: printf 'EMAIL_TO=inraby@gmail.com\n' > .env
+        run: |
+          printf 'EMAIL_TO=inraby@gmail.com\n' > .env
+          printf 'SMTP_PASSWORD=%s\n' "${{ secrets.SMTP_PASSWORD }}" >> .env
 
       - name: Run pipeline
         id: pipeline
