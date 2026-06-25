@@ -10,6 +10,8 @@ import logging
 import os
 import smtplib
 import sys
+import urllib.error
+import urllib.request
 from datetime import datetime, timezone
 from email.message import EmailMessage
 from email.mime.multipart import MIMEMultipart
@@ -58,6 +60,25 @@ def build_message(subject: str, body_text: str, body_html: str | None, to: str, 
     if body_html:
         message.attach(MIMEText(body_html, "html"))
     return message
+
+
+def get_oauth_account_email(creds) -> str:
+    """Resolve the Google account tied to the OAuth access token."""
+    if not creds.token:
+        raise EnvironmentError("OAuth access token missing after refresh")
+    url = f"https://oauth2.googleapis.com/tokeninfo?access_token={creds.token}"
+    try:
+        with urllib.request.urlopen(url, timeout=15) as response:
+            payload = json.loads(response.read().decode())
+    except urllib.error.HTTPError as exc:
+        raise EnvironmentError(f"Could not verify OAuth account: {exc}") from exc
+    email = payload.get("email", "").strip()
+    if not email:
+        raise EnvironmentError(
+            "Could not determine OAuth account email. Re-run authorize_google.py "
+            f"and sign in as {DEFAULT_TO}, then update the TOKEN_JSON secret."
+        )
+    return email
 
 
 def encode_gmail_raw(subject: str, body_text: str, body_html: str | None, to: str, from_addr: str) -> str:
@@ -117,7 +138,7 @@ def send_via_gmail_api(subject: str, body_text: str, body_html: str | None = Non
         )
 
     to = os.getenv("EMAIL_TO", DEFAULT_TO)
-    from_addr = os.getenv("EMAIL_FROM", DEFAULT_FROM)
+    from_addr = get_oauth_account_email(creds)
     raw = encode_gmail_raw(subject, body_text, body_html, to, from_addr)
     service = build("gmail", "v1", credentials=creds, cache_discovery=False)
     logging.info("Sending email via Gmail API from %s to %s: %s", from_addr, to, subject)
