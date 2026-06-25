@@ -64,7 +64,7 @@ def build_message(subject: str, body_text: str, body_html: str | None, to: str, 
 
 def get_oauth_account_email(creds) -> str:
     """Resolve the Google account tied to the OAuth access token."""
-    configured = os.getenv("OAUTH_SENDER_EMAIL", os.getenv("SMTP_USERNAME", "")).strip()
+    configured = os.getenv("OAUTH_SENDER_EMAIL", "").strip()
     if configured:
         return configured
 
