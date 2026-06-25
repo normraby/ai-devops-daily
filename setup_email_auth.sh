@@ -8,13 +8,14 @@ if [[ ! -f client_secret.json ]]; then
   exit 1
 fi
 
-echo "Re-authorizing Google OAuth for YouTube upload + Gmail send."
-echo "Sign in as the Google account that owns the YouTube channel (inraby@gmail.com)."
+echo "Authorize Gmail send for daily status emails."
+echo "Sign in as inraby@gmail.com (personal Gmail with a mailbox)."
+echo "This does NOT change token.json used for YouTube uploads (norm@uaisystems.com)."
 echo
 
-python authorize_google.py
+python authorize_google.py --email-only
 
 echo
-echo "Updating GitHub secrets..."
-gh secret set TOKEN_JSON < token.json
+echo "Updating GitHub secret EMAIL_TOKEN_JSON..."
+gh secret set EMAIL_TOKEN_JSON < token_email.json
 echo "Done. Re-run the daily status workflow to verify email delivery."

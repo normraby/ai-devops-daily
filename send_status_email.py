@@ -22,7 +22,7 @@ from dotenv import load_dotenv
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-from google_auth import TOKEN_FILE, has_gmail_scope, load_credentials
+from google_auth import EMAIL_TOKEN_FILE, TOKEN_FILE, has_gmail_scope, load_credentials, load_email_credentials
 from script_utils import LOGS_DIR, parse_header, script_path
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -168,15 +168,28 @@ def gmail_api_not_enabled_error(exc: HttpError) -> EnvironmentError | None:
     return None
 
 
-def send_via_gmail_api(subject: str, body_text: str, body_html: str | None = None) -> None:
-    if not TOKEN_FILE.exists():
-        raise EnvironmentError(f"Missing {TOKEN_FILE} for Gmail API send")
+def resolve_gmail_api_credentials():
+    if EMAIL_TOKEN_FILE.exists():
+        creds = load_email_credentials()
+        if not has_gmail_scope(creds):
+            raise EnvironmentError(
+                "Email OAuth token missing gmail.send scope. Run: python authorize_google.py --email-only"
+            )
+        return creds
 
-    creds = load_credentials()
-    if not has_gmail_scope(creds):
-        raise EnvironmentError(
-            "OAuth token missing gmail.send scope. Run: python authorize_google.py"
-        )
+    if TOKEN_FILE.exists():
+        creds = load_credentials()
+        if has_gmail_scope(creds) and oauth_account_has_gmail_mailbox(creds):
+            return creds
+
+    raise EnvironmentError(
+        "Missing token_email.json for Gmail API send. Run: ./setup_email_auth.sh "
+        "(sign in as inraby@gmail.com)"
+    )
+
+
+def send_via_gmail_api(subject: str, body_text: str, body_html: str | None = None) -> None:
+    creds = resolve_gmail_api_credentials()
 
     to = os.getenv("EMAIL_TO", DEFAULT_TO)
     from_addr = get_oauth_account_email(creds)
@@ -271,10 +284,30 @@ def oauth_account_has_gmail_mailbox(creds) -> bool:
 
 
 def send_email(subject: str, body_text: str, body_html: str | None = None) -> None:
-    """Prefer app-password SMTP, then Gmail API when OAuth account is @gmail.com."""
+    """Prefer Gmail API (token_email.json), then app-password SMTP."""
     load_dotenv(PROJECT_ROOT / ".env")
     smtp_password = smtp_password_from_env()
     errors: list[Exception] = []
+
+    if EMAIL_TOKEN_FILE.exists() or (
+        TOKEN_FILE.exists()
+        and oauth_account_has_gmail_mailbox(load_credentials())
+    ):
+        try:
+            send_via_gmail_api(subject, body_text, body_html)
+            return
+        except Exception as exc:
+            errors.append(exc)
+            logging.warning("Gmail API send failed (%s)", exc)
+    elif TOKEN_FILE.exists():
+        try:
+            sender = get_oauth_account_email(load_credentials())
+        except Exception:
+            sender = "OAuth account"
+        logging.info(
+            "No token_email.json and %s has no Gmail mailbox. Run ./setup_email_auth.sh.",
+            sender,
+        )
 
     if smtp_password:
         try:
@@ -284,27 +317,10 @@ def send_email(subject: str, body_text: str, body_html: str | None = None) -> No
             errors.append(exc)
             logging.warning("App-password SMTP send failed (%s)", exc)
 
-    if TOKEN_FILE.exists():
-        creds = load_credentials()
-        if has_gmail_scope(creds) and oauth_account_has_gmail_mailbox(creds):
-            try:
-                send_via_gmail_api(subject, body_text, body_html)
-                return
-            except Exception as exc:
-                errors.append(exc)
-                logging.warning("Gmail API send failed (%s)", exc)
-        elif has_gmail_scope(creds):
-            sender = get_oauth_account_email(creds)
-            logging.info(
-                "Skipping Gmail API for %s (no Gmail mailbox). Configure SMTP_PASSWORD for %s.",
-                sender,
-                DEFAULT_TO,
-            )
-
     if errors:
         raise errors[-1]
     raise EnvironmentError(
-        f"SMTP_PASSWORD not set. Add a Gmail App Password for {DEFAULT_TO} to GitHub secrets."
+        "Email not configured. Run: ./setup_email_auth.sh (sign in as inraby@gmail.com)"
     )
 
 
