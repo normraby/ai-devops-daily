@@ -130,12 +130,21 @@ def encode_gmail_raw(subject: str, body_text: str, body_html: str | None, to: st
 def gmail_send_precondition_error(exc: HttpError, from_addr: str) -> EnvironmentError | None:
     if "failedPrecondition" not in str(exc) and "Precondition check failed" not in str(exc):
         return None
+    if from_addr.endswith("@gmail.com"):
+        hint = (
+            f"  1. Re-run: python authorize_google.py (sign in as {from_addr})\n"
+            "  2. Add gmail.send to OAuth consent screen scopes in Google Cloud Console\n"
+            f"  3. Add {from_addr} as a test user on the OAuth consent screen"
+        )
+    else:
+        hint = (
+            f"The OAuth account ({from_addr}) does not have a Gmail mailbox "
+            "(common for custom domains routed through non-Google email).\n"
+            f"  1. Set SMTP_PASSWORD to a Gmail App Password for {DEFAULT_TO}\n"
+            f"  2. Keep OAuth as {from_addr} for YouTube uploads; use SMTP for status email"
+        )
     return EnvironmentError(
-        "Gmail API rejected the send (precondition failed). Common fixes:\n"
-        f"  1. Re-run: python authorize_google.py (sign in as {DEFAULT_TO})\n"
-        "  2. Add gmail.send to OAuth consent screen scopes in Google Cloud Console\n"
-        f"  3. Add {DEFAULT_TO} as a test user on the OAuth consent screen\n"
-        f"Authenticated sender was: {from_addr}"
+        "Gmail API rejected the send (precondition failed).\n" + hint
     )
 
 
@@ -170,17 +179,17 @@ def send_via_gmail_api(subject: str, body_text: str, body_html: str | None = Non
         )
 
     to = os.getenv("EMAIL_TO", DEFAULT_TO)
-    get_oauth_account_email(creds)  # logs scopes; warns if identity unclear
-    raw = encode_gmail_raw(subject, body_text, body_html, to)
+    from_addr = get_oauth_account_email(creds)
+    raw = encode_gmail_raw(subject, body_text, body_html, to, from_addr)
     service = build("gmail", "v1", credentials=creds, cache_discovery=False)
-    logging.info("Sending email via Gmail API to %s: %s", to, subject)
+    logging.info("Sending email via Gmail API from %s to %s: %s", from_addr, to, subject)
     try:
         service.users().messages().send(userId="me", body={"raw": raw}).execute()
     except HttpError as exc:
         configured = gmail_api_not_enabled_error(exc)
         if configured:
             raise configured from exc
-        precondition = gmail_send_precondition_error(exc, DEFAULT_TO)
+        precondition = gmail_send_precondition_error(exc, from_addr)
         if precondition:
             raise precondition from exc
         raise
@@ -252,19 +261,20 @@ def send_via_smtp(subject: str, body_text: str, body_html: str | None = None) ->
         server.sendmail(from_addr, [to], message.as_string())
 
 
+def oauth_account_has_gmail_mailbox(creds) -> bool:
+    """Gmail API/SMTP OAuth only work when the signed-in account uses Gmail for mail."""
+    try:
+        email = get_oauth_account_email(creds).lower()
+    except Exception:
+        return False
+    return email.endswith("@gmail.com")
+
+
 def send_email(subject: str, body_text: str, body_html: str | None = None) -> None:
-    """Prefer OAuth SMTP (TOKEN_JSON), then app password, then Gmail API."""
+    """Prefer app-password SMTP, then Gmail API when OAuth account is @gmail.com."""
     load_dotenv(PROJECT_ROOT / ".env")
     smtp_password = smtp_password_from_env()
     errors: list[Exception] = []
-
-    if TOKEN_FILE.exists():
-        try:
-            send_via_smtp_oauth(subject, body_text, body_html)
-            return
-        except Exception as exc:
-            errors.append(exc)
-            logging.warning("OAuth SMTP send failed (%s)", exc)
 
     if smtp_password:
         try:
@@ -275,12 +285,27 @@ def send_email(subject: str, body_text: str, body_html: str | None = None) -> No
             logging.warning("App-password SMTP send failed (%s)", exc)
 
     if TOKEN_FILE.exists():
-        send_via_gmail_api(subject, body_text, body_html)
-        return
+        creds = load_credentials()
+        if has_gmail_scope(creds) and oauth_account_has_gmail_mailbox(creds):
+            try:
+                send_via_gmail_api(subject, body_text, body_html)
+                return
+            except Exception as exc:
+                errors.append(exc)
+                logging.warning("Gmail API send failed (%s)", exc)
+        elif has_gmail_scope(creds):
+            sender = get_oauth_account_email(creds)
+            logging.info(
+                "Skipping Gmail API for %s (no Gmail mailbox). Configure SMTP_PASSWORD for %s.",
+                sender,
+                DEFAULT_TO,
+            )
 
     if errors:
         raise errors[-1]
-    send_via_smtp(subject, body_text, body_html)
+    raise EnvironmentError(
+        f"SMTP_PASSWORD not set. Add a Gmail App Password for {DEFAULT_TO} to GitHub secrets."
+    )
 
 
 def load_tracker() -> dict:
