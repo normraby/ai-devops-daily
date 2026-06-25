@@ -18,6 +18,10 @@ def main() -> int:
     for scope in SCOPES:
         print(f"  - {scope}")
     print()
+    print("Before authorizing, confirm in Google Cloud Console:")
+    print("  OAuth consent screen scopes include youtube.upload, gmail.send, userinfo.email")
+    print("  Test users include the Google account that owns the YouTube channel")
+    print()
     print("Enable Gmail API if prompted:")
     print("  https://console.cloud.google.com/apis/library/gmail.googleapis.com")
     print()

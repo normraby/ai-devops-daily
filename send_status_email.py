@@ -73,11 +73,17 @@ def get_oauth_account_email(creds) -> str:
     except urllib.error.HTTPError as exc:
         raise EnvironmentError(f"Could not verify OAuth account: {exc}") from exc
     email = payload.get("email", "").strip()
+    scopes = payload.get("scope", "")
+    logging.info("OAuth token scopes: %s", scopes)
     if not email:
-        raise EnvironmentError(
-            "Could not determine OAuth account email. Re-run authorize_google.py "
-            f"and sign in as {DEFAULT_TO}, then update the TOKEN_JSON secret."
+        fallback = os.getenv("EMAIL_FROM", DEFAULT_FROM)
+        logging.warning(
+            "OAuth tokeninfo did not return email; using configured sender %s. "
+            "Re-run authorize_google.py signed in as %s and update TOKEN_JSON.",
+            fallback,
+            DEFAULT_TO,
         )
+        return fallback
     return email
 
 
