@@ -117,10 +117,9 @@ def send_via_gmail_api(subject: str, body_text: str, body_html: str | None = Non
         )
 
     to = os.getenv("EMAIL_TO", DEFAULT_TO)
-    service = build("gmail", "v1", credentials=creds, cache_discovery=False)
-    profile = service.users().getProfile(userId="me").execute()
-    from_addr = profile["emailAddress"]
+    from_addr = os.getenv("EMAIL_FROM", DEFAULT_FROM)
     raw = encode_gmail_raw(subject, body_text, body_html, to, from_addr)
+    service = build("gmail", "v1", credentials=creds, cache_discovery=False)
     logging.info("Sending email via Gmail API from %s to %s: %s", from_addr, to, subject)
     try:
         service.users().messages().send(userId="me", body={"raw": raw}).execute()
