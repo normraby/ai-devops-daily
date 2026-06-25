@@ -45,6 +45,7 @@ jobs:
       - name: Write .env
         run: |
           printf 'EMAIL_TO=inraby@gmail.com\n' > .env
+          printf 'SMTP_USERNAME=inraby@gmail.com\n' >> .env
           printf 'SMTP_PASSWORD=%s\n' "${{ secrets.SMTP_PASSWORD }}" >> .env
 
       - name: Run pipeline

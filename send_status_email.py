@@ -163,7 +163,7 @@ def send_via_gmail_api(subject: str, body_text: str, body_html: str | None = Non
 
 def send_via_smtp(subject: str, body_text: str, body_html: str | None = None) -> None:
     load_dotenv(PROJECT_ROOT / ".env")
-    password = os.getenv("SMTP_PASSWORD", "").strip()
+    password = os.getenv("SMTP_PASSWORD", "").strip().replace(" ", "")
     if not password:
         raise EnvironmentError(
             "SMTP_PASSWORD not set. Add a Gmail App Password to .env or the "
@@ -186,19 +186,17 @@ def send_via_smtp(subject: str, body_text: str, body_html: str | None = None) ->
 
 
 def send_email(subject: str, body_text: str, body_html: str | None = None) -> None:
-    """Prefer Gmail API (uses TOKEN_JSON); fall back to SMTP if configured."""
+    """Prefer SMTP when configured; otherwise use Gmail API via TOKEN_JSON."""
     load_dotenv(PROJECT_ROOT / ".env")
-    smtp_password = os.getenv("SMTP_PASSWORD", "").strip()
+    smtp_password = os.getenv("SMTP_PASSWORD", "").strip().replace(" ", "")
+
+    if smtp_password:
+        send_via_smtp(subject, body_text, body_html)
+        return
 
     if TOKEN_FILE.exists():
-        try:
-            send_via_gmail_api(subject, body_text, body_html)
-            return
-        except Exception as exc:
-            if smtp_password:
-                logging.warning("Gmail API send failed (%s); trying SMTP", exc)
-            else:
-                raise
+        send_via_gmail_api(subject, body_text, body_html)
+        return
 
     send_via_smtp(subject, body_text, body_html)
 
