@@ -11,6 +11,7 @@ import os
 import smtplib
 import sys
 from datetime import datetime, timezone
+from email.message import EmailMessage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -59,6 +60,32 @@ def build_message(subject: str, body_text: str, body_html: str | None, to: str, 
     return message
 
 
+def encode_gmail_raw(subject: str, body_text: str, body_html: str | None, to: str, from_addr: str) -> str:
+    """Build a RFC 2822 message and base64url-encode it for Gmail API."""
+    message = EmailMessage()
+    message["To"] = to
+    message["From"] = from_addr
+    message["Subject"] = subject
+    if body_html:
+        message.set_content(body_text, subtype="plain", charset="utf-8")
+        message.add_alternative(body_html, subtype="html", charset="utf-8")
+    else:
+        message.set_content(body_text, charset="utf-8")
+    return base64.urlsafe_b64encode(message.as_bytes()).decode().rstrip("=")
+
+
+def gmail_send_precondition_error(exc: HttpError, from_addr: str) -> EnvironmentError | None:
+    if "failedPrecondition" not in str(exc) and "Precondition check failed" not in str(exc):
+        return None
+    return EnvironmentError(
+        "Gmail API rejected the send (precondition failed). Common fixes:\n"
+        f"  1. Re-run: python authorize_google.py (sign in as {DEFAULT_TO})\n"
+        "  2. Add gmail.send to OAuth consent screen scopes in Google Cloud Console\n"
+        f"  3. Add {DEFAULT_TO} as a test user on the OAuth consent screen\n"
+        f"Authenticated sender was: {from_addr}"
+    )
+
+
 def gmail_api_not_enabled_error(exc: HttpError) -> EnvironmentError | None:
     """Return a clearer error when Gmail API is disabled in Google Cloud."""
     try:
@@ -90,16 +117,20 @@ def send_via_gmail_api(subject: str, body_text: str, body_html: str | None = Non
         )
 
     to = os.getenv("EMAIL_TO", DEFAULT_TO)
-    message = build_message(subject, body_text, body_html, to, DEFAULT_FROM)
-    raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
     service = build("gmail", "v1", credentials=creds, cache_discovery=False)
-    logging.info("Sending email via Gmail API to %s: %s", to, subject)
+    profile = service.users().getProfile(userId="me").execute()
+    from_addr = profile["emailAddress"]
+    raw = encode_gmail_raw(subject, body_text, body_html, to, from_addr)
+    logging.info("Sending email via Gmail API from %s to %s: %s", from_addr, to, subject)
     try:
         service.users().messages().send(userId="me", body={"raw": raw}).execute()
     except HttpError as exc:
         configured = gmail_api_not_enabled_error(exc)
         if configured:
             raise configured from exc
+        precondition = gmail_send_precondition_error(exc, from_addr)
+        if precondition:
+            raise precondition from exc
         raise
 
 
