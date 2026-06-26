@@ -1,9 +1,27 @@
+# Secrets — never commit
 client_secret.json
+credentials.json
 token.json
-/output/
-/logs/
-assets/pexels_cache/
+token_email.json
+.env
+.env.*
+!.env.example
+secrets/
+credentials/
+
+# Python environments and bytecode
+.venv/
+venv/
 __pycache__/
 *.pyc
-.env
+
+# Generated output and logs
+/output/
+/logs/
+*.log
+
+# Cached assets
+assets/pexels_cache/
+
+# macOS
 .DS_Store
