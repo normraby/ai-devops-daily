@@ -289,10 +289,14 @@ def send_email(subject: str, body_text: str, body_html: str | None = None) -> No
     smtp_password = smtp_password_from_env()
     errors: list[Exception] = []
 
-    if EMAIL_TOKEN_FILE.exists() or (
-        TOKEN_FILE.exists()
-        and oauth_account_has_gmail_mailbox(load_credentials())
-    ):
+    if EMAIL_TOKEN_FILE.exists():
+        try:
+            send_via_gmail_api(subject, body_text, body_html)
+            return
+        except Exception as exc:
+            errors.append(exc)
+            logging.warning("Gmail API send failed (%s)", exc)
+    elif TOKEN_FILE.exists() and oauth_account_has_gmail_mailbox(load_credentials()):
         try:
             send_via_gmail_api(subject, body_text, body_html)
             return
