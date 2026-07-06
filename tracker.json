@@ -1,5 +1,5 @@
 {
-  "last_uploaded": 9,
+  "last_uploaded": 10,
   "videos": {
     "1": {
       "processed_at": "2026-06-22T20:32:57+00:00",
@@ -58,6 +58,12 @@
       "status": "uploaded",
       "video_id": "TFVvR9L4ALI",
       "url": "https://www.youtube.com/watch?v=TFVvR9L4ALI"
+    },
+    "10": {
+      "processed_at": "2026-07-06T17:37:12.743877+00:00",
+      "status": "uploaded",
+      "video_id": "W2GZQZjDpEM",
+      "url": "https://www.youtube.com/watch?v=W2GZQZjDpEM"
     }
   }
 }
