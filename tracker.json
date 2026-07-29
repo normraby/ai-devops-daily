@@ -2,22 +2,28 @@
   "last_uploaded": 16,
   "videos": {
     "1": {
-      "processed_at": "2026-06-22T20:32:57+00:00",
+      "processed_at": "2026-07-29T12:48:43.015204+00:00",
       "status": "uploaded",
-      "video_id": "isvLkmuKe48",
-      "url": "https://www.youtube.com/watch?v=isvLkmuKe48"
+      "video_id": "sbNnEya84I8",
+      "url": "https://www.youtube.com/watch?v=sbNnEya84I8",
+      "regenerated_at": "2026-07-29T12:48:43.015204+00:00",
+      "replaced_video_id": "isvLkmuKe48"
     },
     "2": {
-      "processed_at": "2026-06-22T21:01:53+00:00",
+      "processed_at": "2026-07-29T13:02:26.151896+00:00",
       "status": "uploaded",
-      "video_id": "eWK2we6wdxc",
-      "url": "https://www.youtube.com/watch?v=eWK2we6wdxc"
+      "video_id": "eqK5WSq8ILQ",
+      "url": "https://www.youtube.com/watch?v=eqK5WSq8ILQ",
+      "regenerated_at": "2026-07-29T13:02:26.151896+00:00",
+      "replaced_video_id": "eWK2we6wdxc"
     },
     "3": {
-      "processed_at": "2026-06-23T13:43:48.551202+00:00",
+      "processed_at": "2026-07-29T13:03:18.206579+00:00",
       "status": "uploaded",
-      "video_id": "AbzKHaTCjW4",
-      "url": "https://www.youtube.com/watch?v=AbzKHaTCjW4"
+      "video_id": "6H9SM_ugPns",
+      "url": "https://www.youtube.com/watch?v=6H9SM_ugPns",
+      "regenerated_at": "2026-07-29T13:03:18.206579+00:00",
+      "replaced_video_id": "AbzKHaTCjW4"
     },
     "4": {
       "processed_at": "2026-06-24T19:22:35.013563+00:00",

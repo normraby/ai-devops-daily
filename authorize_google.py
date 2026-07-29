@@ -58,10 +58,6 @@ def main() -> int:
         print(f"ERROR: Missing {CLIENT_SECRET_FILE}", file=sys.stderr)
         return 1
 
-    if token_file.exists():
-        token_file.unlink()
-        print(f"Removed old {token_file.name} to request updated scopes.\n")
-
     flow = InstalledAppFlow.from_client_secrets_file(str(CLIENT_SECRET_FILE), scopes)
     creds = flow.run_local_server(port=0, access_type="offline", prompt="consent")
     token_file.write_text(creds.to_json(), encoding="utf-8")

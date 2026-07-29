@@ -9,9 +9,9 @@ CHANNEL_NAME = "AI DevOps Daily"
 CHANNEL_HANDLE = "@AIDevOpsDaily-w8i"
 
 AI_DISCLOSURE = (
-    "Production note: AI-assisted scripting, text-to-speech narration, and programmatic "
-    "slide visuals. Code examples are original teaching snippets. Metrics and scenarios "
-    "are illustrative unless a public source is cited below."
+    "Originality & production: Original AI DevOps Daily teaching content — authored slide "
+    "diagrams/code examples (no stock footage), AI-assisted scripting, and text-to-speech narration. "
+    "Metrics and scenarios are illustrative teaching examples unless a public source is cited below."
 )
 
 COMPLIANCE_FOOTER = (
