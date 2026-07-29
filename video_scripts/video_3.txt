@@ -5,7 +5,7 @@ SCRIPT:
 
 0:00-0:30 - The Benchmark Setup
 Visual: Lab environment diagram. 50 scenarios split across 5 categories: build, test, deploy, rollback, scale. Stopwatch icon.
-Voiceover: We built a controlled benchmark lab. Fifty real-world DevOps scenarios — pulled from actual enterprise pipelines — run head to head. On one side: traditional Jenkins pipelines with Groovy Jenkinsfiles, managed by experienced platform engineers. On the other: AI DevOps agents with no pre-written pipeline code. Same repositories. Same infrastructure. Same constraints. We measured deployment speed, failure rates, maintenance overhead, and total cost of ownership over ninety days. The results surprised even us.
+Voiceover: This illustrative benchmark lab compares fifty DevOps scenarios — build, test, deploy, rollback, and scale — across traditional Jenkins pipelines versus AI-assisted orchestration. Same repositories and constraints in the teaching scenario. We measure speed, failure rates, maintenance overhead, and ownership cost. Numbers below are illustrative for learning — not a published third-party study.
 
 0:30-1:00 - Scenario Categories
 Visual: Five category cards with scenario counts: Build & Compile (12), Test & Quality (10), Deploy & Release (12), Rollback & Recovery (8), Scale & Optimize (8).

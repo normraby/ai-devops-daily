@@ -5,11 +5,11 @@ SCRIPT:
 
 0:00-0:30 - Cold Open: The Decline
 Visual: Animated chart showing Jenkins market share dropping from 68% in 2020 to 31% in 2026. Red downward trend line.
-Voiceover: For fifteen years, Jenkins was the undisputed king of continuous integration. Every enterprise had a Jenkins server — sometimes dozens of them — running thousands of Groovy pipelines. But something changed in 2024, and by 2026, the data is undeniable. Jenkins is dying. Not because it stopped working, but because a fundamentally better paradigm arrived: AI DevOps agents that write, optimize, and self-heal pipelines without human intervention.
+Voiceover: For fifteen years, Jenkins was the undisputed king of continuous integration. Many enterprises ran Jenkins servers running thousands of Groovy pipelines. By the mid-2020s, a new paradigm gained traction: AI-assisted DevOps tooling that helps write, optimize, and self-heal pipelines with less manual toil. This episode explores that shift — with illustrative scenarios for learning, not vendor benchmarks.
 
 0:30-1:00 - The Numbers
 Visual: Infographic comparing Jenkins adoption metrics: 2020 vs 2026. Side-by-side bar charts for new project adoption, active maintenance hours, and mean time to pipeline fix.
-Voiceover: Let's look at the numbers. According to the 2026 State of DevOps Report, new project adoption of Jenkins dropped from sixty-eight percent to thirty-one percent. More telling: the average platform team spends fourteen hours per week maintaining Jenkins infrastructure — plugin conflicts, agent scaling, credential rotation. Teams using AI DevOps agents report an average of two point three hours per week on pipeline maintenance. That's an eighty-three percent reduction. The ROI isn't theoretical. It's measured in engineer hours reclaimed every single sprint.
+Voiceover: In this illustrative teaching scenario, Jenkins adoption metrics are often cited as declining relative to newer approaches. Platform teams commonly report spending significant weekly hours on plugin conflicts, agent scaling, and credential rotation — while teams using AI-assisted pipeline tooling report substantially lower maintenance overhead. Treat these as directional comparisons for learning, not verified survey results.
 
 1:00-1:30 - Why Jenkins Can't Compete
 Visual: Diagram showing Jenkins architecture: controller, agents, plugins, Groovy scripts. Red X marks on pain points: plugin hell, brittle Groovy, manual scaling.
@@ -21,7 +21,7 @@ Voiceover: The architecture shift is profound. Traditional Jenkins follows a dec
 
 2:00-2:30 - Real-World Case Study
 Visual: Case study card: FinTech company, 200 engineers, migrated from Jenkins to AI agents in Q3 2025. Metrics: deployment frequency 4x, failed deploys down 67%, pipeline maintenance hours down 81%.
-Voiceover: Consider a mid-size fintech company with two hundred engineers and forty-seven Jenkins pipelines. Their platform team spent three full-time engineers just keeping Jenkins alive. In Q3 2025, they deployed AI DevOps agents alongside Jenkins, then gradually migrated. Within ninety days, deployment frequency quadrupled. Failed deployments dropped sixty-seven percent. And those three engineers? They moved to building internal developer platform features instead of babysitting Groovy scripts. That's not a tooling upgrade. That's a team transformation.
+Voiceover: Consider an illustrative fintech scenario: two hundred engineers and dozens of Jenkins pipelines. A platform team might spend multiple full-time equivalents keeping Jenkins alive. In a phased migration story, teams often report higher deployment frequency, fewer failed deploys, and engineers shifting from firefighting to platform product work — but your results depend on org maturity, legacy constraints, and execution quality.
 
 2:30-3:00 - What About Existing Jenkins Investment?
 Visual: Migration roadmap timeline: Phase 1 shadow mode, Phase 2 hybrid, Phase 3 full migration. Green checkmarks at each phase.

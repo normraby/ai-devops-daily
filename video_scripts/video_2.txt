@@ -5,7 +5,7 @@ SCRIPT:
 
 0:00-0:30 - Introduction: The Legacy Problem
 Visual: Before/after split screen. Left: cluttered Jenkins dashboard with 47 jobs. Right: clean Terraform plan output with green checks.
-Voiceover: In January 2025, a healthcare technology company with three hundred engineers came to us with a problem. Their Jenkins instance was twelve years old. It managed not just CI/CD, but infrastructure provisioning, database migrations, and compliance scanning. One tool doing everything — and breaking constantly. They needed a modernization path that didn't halt feature delivery. This is their story: a six-month Jenkins to Terraform migration, orchestrated by AI DevOps agents, completed with zero production outages.
+Voiceover: This illustrative modernization case study follows a healthcare technology company with hundreds of engineers. Their aging Jenkins instance managed CI/CD plus provisioning, migrations, and compliance scans — creating operational drag. The learning goal: a Terraform-forward path with AI-assisted orchestration that doesn't halt feature delivery. Names and timelines are composite teaching scenarios.
 
 0:30-1:00 - Starting State Assessment
 Visual: Audit dashboard showing: 47 Jenkins jobs, 23 custom Groovy scripts, 156 plugin dependencies, 4.2 hours average pipeline failure recovery time.

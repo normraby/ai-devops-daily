@@ -17,7 +17,7 @@ Voiceover: The 2027 AI SRE job description looks fundamentally different. Gone: 
 
 1:30-2:00 - Toil Reduction by the Numbers
 Visual: Before/after metrics: Toil 62% → 14%, Engineering time 23% → 58%, On-call pages 14/wk → 2.1/wk, SLO compliance 94% → 99.4%.
-Voiceover: The numbers from teams that have deployed AI SRE agents. Toil reduced from sixty-two percent to fourteen percent of SRE time. Engineering time increased from twenty-three to fifty-eight percent — SREs finally doing the work they were hired for. On-call pages dropped from fourteen per week to two point one — an eighty-five percent reduction. SLO compliance improved from ninety-four to ninety-nine point four percent. Mean time to recovery for the incidents that do require human intervention dropped from forty-seven to eight minutes — because agents handle the routine and escalate only complex cases with full context. Engineer retention in SRE roles improved — fewer burned-out engineers leaving for pure development roles.
+Voiceover: In illustrative deployments of AI SRE tooling, teams often report major reductions in toil — repetitive operational tasks like restarts, scaling, and runbook execution — with more time returned to engineering work. On-call volume commonly drops when agents handle known failure patterns. SLO compliance may improve when remediation is faster and more consistent. Treat every percentage in this episode as a teaching scenario aligned with the slides, not verified survey data.
 
 2:00-2:30 - What Humans Still Do Better
 Visual: Human advantage areas with examples: Novel failure modes, Architecture decisions, Cross-team coordination, Blameless postmortems, Capacity strategy.

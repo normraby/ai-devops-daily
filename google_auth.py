@@ -17,6 +17,7 @@ EMAIL_TOKEN_FILE = PROJECT_ROOT / "token_email.json"
 
 SCOPES = [
     "https://www.googleapis.com/auth/youtube.upload",
+    "https://www.googleapis.com/auth/youtube.force-ssl",
     "https://www.googleapis.com/auth/gmail.send",
     "openid",
     "https://www.googleapis.com/auth/userinfo.email",
