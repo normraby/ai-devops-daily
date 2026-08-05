@@ -1,9 +1,10 @@
 name: AI DevOps Daily Status Email
 
 on:
-  schedule:
-    # Daily at 8:00 AM EST (13:00 UTC)
-    - cron: "0 13 * * *"
+  # Paused 2026-08-05 — uncomment schedule to resume daily status emails
+  # schedule:
+  #   # Daily at 8:00 AM EST (13:00 UTC)
+  #   - cron: "0 13 * * *"
   workflow_dispatch:
 
 jobs:

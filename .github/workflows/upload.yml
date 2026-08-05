@@ -1,8 +1,9 @@
 name: AI DevOps Daily Upload
 
 on:
-  schedule:
-    - cron: "0 15 * * 1,4"
+  # Paused 2026-08-05 — uncomment schedule to resume Mon/Thu uploads
+  # schedule:
+  #   - cron: "0 15 * * 1,4"
   workflow_dispatch:
     inputs:
       video_number:
